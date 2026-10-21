@@ -5,9 +5,9 @@ import test from 'node:test';
 import {
   cancel, checkpoint, extendBudget, finish, recordProof, recordReview, startTask, status, verify,
 } from '../lib/tasks.mjs';
-import { atomicJson, withLock } from '../lib/io.mjs';
+import { atomicJson, readJson, withLock } from '../lib/io.mjs';
 import { fingerprint } from '../lib/git.mjs';
-import { fixture, commit, git, cli } from './helpers.mjs';
+import { fixture, commit, git, cli, temporary } from './helpers.mjs';
 
 const request = { goal: 'Preserve the answer', criteria: ['The answer is 42'], scope: ['src'] };
 
@@ -129,11 +129,66 @@ test('targeted checks accumulate only for the same source; unknown selectors fai
 test('attempt budgets stop retries and require a recorded extension', async t => {
   const root = await fixture(t, [{ name: 'fail', command: [process.execPath, '-e', 'process.exit(1)'] }]);
   await startTask(root, request);
-  for (let attempt = 0; attempt < 3; attempt++) assert.equal((await verify(root)).ok, false);
+  // Each retry runs against a changed source; runs on the unchanged starting source are free (next test).
+  const retry = attempt => fs.writeFileSync(path.join(root, 'src/app.mjs'), `export const answer = ${attempt};\n`);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    retry(attempt);
+    assert.equal((await verify(root)).ok, false);
+  }
   await assert.rejects(verify(root), /budget exhausted/);
   await assert.rejects(extendBudget(root, 1, ''), /nonempty/);
   assert.equal((await extendBudget(root, 1, 'A new regression test isolates a different hypothesis.')).attemptLimit, 4);
   assert.equal((await verify(root)).attempts, 4);
+});
+
+test('the first two checks on the unchanged starting source are free; later reruns there spend attempts', async t => {
+  const root = await fixture(t, [{ name: 'fail', command: [process.execPath, '-e', 'process.exit(1)'] }]);
+  await startTask(root, request);
+  for (let run = 0; run < 2; run++) {
+    const red = await verify(root);
+    assert.equal(red.ok, false);
+    assert.equal(red.attemptCharged, false);
+    assert.equal(red.attempts, 0);
+  }
+  // Rerunning the unchanged source until it passes is a retry, so the budget still stops it.
+  for (let run = 1; run <= 3; run++) {
+    const rerun = await verify(root);
+    assert.equal(rerun.attemptCharged, true);
+    assert.equal(rerun.attempts, run);
+  }
+  await assert.rejects(verify(root), error => error.code === 'BUDGET_EXHAUSTED');
+  assert.equal(readJson(root, '.leanloop/task.json').history.length, 5);
+});
+
+test('a source change is charged, and returning to the starting source does not reset the free runs', async t => {
+  const root = await fixture(t, [{ name: 'fail', command: [process.execPath, '-e', 'process.exit(1)'] }]);
+  await startTask(root, request);
+  assert.equal((await verify(root)).attemptCharged, false);
+  fs.writeFileSync(path.join(root, 'src/app.mjs'), 'export const answer = 43;\n');
+  const changed = await verify(root);
+  assert.equal(changed.attemptCharged, true);
+  assert.equal(changed.attempts, 1);
+  fs.writeFileSync(path.join(root, 'src/app.mjs'), 'export const answer = 42;\n');
+  assert.equal((await verify(root)).attemptCharged, false);
+  assert.equal((await verify(root)).attemptCharged, true);
+});
+
+test('a check that fails and then passes on the same final source needs review before finish', async t => {
+  // The check fails on its first run and passes afterwards, without any source change: a flaky check.
+  const marker = path.join(temporary(t), 'ran-once');
+  const flaky = `const fs = require('fs'); if (!fs.existsSync(${JSON.stringify(marker)})) { fs.writeFileSync(${JSON.stringify(marker)}, ''); process.exit(1); }`;
+  const root = await fixture(t, [{ name: 'flaky', command: [process.execPath, '-e', flaky] }]);
+  commit(root);
+  await startTask(root, request);
+  fs.writeFileSync(path.join(root, 'src/app.mjs'), 'export const answer = 42; // fixed\n');
+  assert.equal((await verify(root)).ok, false);
+  assert.equal((await verify(root)).ok, true);
+  await recordProof(root, 1, 'The flaky check passed on its second run.');
+  assert.deepEqual(status(root).integrity.flakyChecks, ['flaky']);
+  assert.deepEqual(status(root).observedFailToPass, []);
+  await assert.rejects(finish(root), error => error.code === 'INTEGRITY_REVIEW_REQUIRED' && /failed and passed on this same source/.test(error.message));
+  await recordReview(root, 'independent-reviewer', 'approve', 'The first failure was an unrelated environment problem.');
+  assert.equal((await finish(root)).phase, 'done');
 });
 
 test('checkpoints resume task state without bypassing evidence freshness', async t => {

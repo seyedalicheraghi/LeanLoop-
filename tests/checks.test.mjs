@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import test from 'node:test';
-import { runCheck, windowsCommand, MAX_LOG_BYTES } from '../lib/checks.mjs';
+import { descendantsFromListing, runCheck, windowsCommand, MAX_LOG_BYTES } from '../lib/checks.mjs';
 import { startTask, verify } from '../lib/tasks.mjs';
 import { fixture, temporary, cli, link } from './helpers.mjs';
 
@@ -155,4 +155,70 @@ test('Windows .cmd shims run through cmd.exe with literal arguments', { skip: pr
   assert.equal(resolved.verbatim, true);
   assert.match(resolved.args.at(-1), /echoargs\.cmd" "x"/i);
   assert.deepEqual(windowsCommand(['tool.exe', 'x'], { Path: bin }), { file: 'tool.exe', args: ['x'], verbatim: false });
+});
+
+test('the Windows descendant sweep follows an edge only from a parent created no later than its child', () => {
+  const started = Date.parse('2026-01-01T00:00:00.000Z');
+  const at = offset => new Date(started + offset).toISOString();
+  const listing = [
+    `100 1 ${at(4000)}`, // the root's PID, since reused by an unrelated process
+    `200 100 ${at(10)}`,
+    `300 200 ${at(5)}`, // older than 200, so its parent was an earlier process that held PID 200
+    `310 300 ${at(20)}`,
+    `400 200 ${at(10)}`, // created in the same millisecond as its parent
+    `500 400 ${at(30)}`,
+    `600 100 ${at(5000)}`, // a child of the reused root PID, created after the root closed
+    '',
+  ].join('\r\n');
+  assert.deepEqual(descendantsFromListing(listing, 100, started, started + 100).sort(), ['200', '400', '500']);
+  assert.deepEqual(descendantsFromListing(listing, 100, started, null).sort(), ['200', '400', '500', '600']);
+});
+
+test('a stopped check whose descendant keeps the output pipes open returns after a bounded grace period', { timeout: 60000 }, async t => {
+  const root = await fixture(t);
+  // A detached grandchild whose parent exited escapes both the process-group kill and the Windows parent-chain sweep.
+  const grandchild = "require('fs').writeFileSync('escaped.pid', String(process.pid)); setTimeout(() => {}, 30000);";
+  const intermediate = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], ` +
+    "{ stdio: 'inherit', detached: true }).unref(); setTimeout(() => process.exit(0), 300);";
+  const parent = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(intermediate)}], { stdio: 'inherit' }); ` +
+    'setInterval(() => {}, 1000);';
+  const marker = path.join(root, 'escaped.pid');
+  try {
+    const result = await runCheck(root, { name: 'held-pipes', command: [process.execPath, '-e', parent], timeoutSeconds: 2 },
+      'grace-test', { closeGraceMs: 1000 });
+    assert.equal(fs.existsSync(marker), true, 'the escaping grandchild must have started');
+    assert.equal(result.ok, false);
+    assert.equal(result.timedOut, true);
+    assert.match(result.cleanupError, /Output pipes stayed open/);
+    assert.ok(result.elapsedMs < 20000, `elapsed ${result.elapsedMs} ms`);
+  } finally {
+    // Stop the escaped process and wait for it, so the fixture directory it runs in can be removed.
+    try {
+      const pid = Number(fs.readFileSync(marker, 'utf8'));
+      process.kill(pid);
+      for (let attempt = 0; attempt < 100; attempt++) {
+        process.kill(pid, 0);
+        await wait(50);
+      }
+    } catch {
+      // Gone; Windows releases the directory handle shortly after the process ends.
+      await wait(500);
+    }
+  }
+});
+
+test('Windows shims resolve against the check cwd and pass trailing backslashes literally', { skip: process.platform !== 'win32' && 'Windows only' }, async t => {
+  const root = await fixture(t);
+  const shim = `@"${process.execPath}" -e "console.log(JSON.stringify(process.argv.slice(1)))" %*\r\n`;
+  fs.mkdirSync(path.join(root, 'pkg/tools'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'pkg/tools/echoargs.cmd'), shim);
+  const resolved = windowsCommand(['tools/echoargs', 'x'], { PATHEXT: '.EXE;.CMD' }, path.join(root, 'pkg'));
+  assert.equal(resolved.verbatim, true);
+  assert.match(resolved.args.at(-1), /pkg\\tools\\echoargs\.cmd" "x"/i);
+  // Before the fix this resolved against the LeanLoop process cwd and spawned the .cmd directly (EINVAL).
+  const args = ['dir\\', 'next', 'a\\b\\\\', 'plain'];
+  const result = await runCheck(root, { name: 'relative', command: ['tools/echoargs', ...args], cwd: 'pkg' }, 'relative-shim-test');
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, result.stdoutLog), 'utf8')), args);
+  assert.match(windowsCommand(['tools/echoargs', 'a\\'], {}, path.join(root, 'pkg')).args.at(-1), /"a\\\\""$/);
 });

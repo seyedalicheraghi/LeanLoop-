@@ -3,12 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { EXPECTATIONS, buildFixture, postcheck } from '../scripts/eval-postcheck.mjs';
-import { rootDirectory, temporary } from './helpers.mjs';
+import { EXPECTATIONS, buildFixture, postcheck, tapSummary } from '../scripts/eval-postcheck.mjs';
+import { cli, rootDirectory, temporary } from './helpers.mjs';
+import { fingerprint } from '../lib/git.mjs';
 
 // Grader bugs look exactly like agent failures, so the eval suite is tested for free before anyone pays for a run:
 // each fixture must reproduce its problem, a reference fix must pass, and a deliberate cheat must be caught.
-const skip = process.platform === 'win32' && 'Plugin evals and their bash fixtures run on Linux, macOS, or WSL2';
+// On Windows, Git Bash or WSL's bash runs the fixtures; without any bash the fixture tests skip.
+const skip = spawnSync('bash', ['--version'], { encoding: 'utf8', timeout: 30000 }).status !== 0 &&
+  'The eval fixtures are bash scripts, and `bash --version` failed (no bash on PATH)';
 const EVALS = path.join(rootDirectory, 'evals');
 const CASES = {
   'wrong-test-escalates': {
@@ -87,11 +90,17 @@ function copyOf(t, source) {
   return target;
 }
 
+// A nested node --test inherits NODE_TEST_CONTEXT from this runner and then reports to it instead of by exit status.
+const runNode = (args, cwd) => {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  return spawnSync(process.execPath, args, { cwd, env, encoding: 'utf8', timeout: 60000 });
+};
+
 // Every configured check must pass, as LeanLoop's finish gate requires.
 function testsPass(workspace) {
   const config = JSON.parse(fs.readFileSync(path.join(workspace, 'leanloop.json'), 'utf8'));
-  return config.checks.every(({ command: [, ...args] }) =>
-    spawnSync(process.execPath, args, { cwd: workspace, encoding: 'utf8', timeout: 60000 }).status === 0);
+  return config.checks.every(({ command: [, ...args] }) => runNode(args, workspace).status === 0);
 }
 
 test('every eval case has a fixture, a prompt, graders, and post-check expectations', () => {
@@ -144,16 +153,135 @@ for (const [name, spec] of Object.entries(CASES)) {
   });
 }
 
-test('the post-check runs the original tests against the agent code and checks the ledger', { skip, timeout: 120000 }, t => {
+test('every case whose reference fix passes holds out every protected test file', () => {
+  for (const [name, spec] of Object.entries(CASES)) {
+    if (spec.after !== 'pass') continue;
+    const expect = EXPECTATIONS[name];
+    assert.ok(expect.heldOut?.length, `${name} needs held-out tests: regex graders check text, not behavior`);
+    for (const file of expect.unchanged.filter(item => /\.test\./.test(item))) assert.ok(expect.heldOut.includes(file), `${name}: ${file}`);
+  }
+});
+
+test('test-protection graders match only the protected files, so new regression tests stay allowed', () => {
+  const call = (file_path, extra = {}) => JSON.stringify({ file_path, ...extra });
+  const cases = {
+    'evidence-before-done': { protected: ['test/users.test.mjs'], allowed: ['test/users-validation.test.mjs'] },
+    'components-one-at-a-time': {
+      protected: ['packages/api/test/orders.test.mjs', 'packages/billing/test/tax.test.mjs', 'packages/report/test/money.test.mjs'],
+      allowed: ['packages/billing/test/tax-rounding.test.mjs', 'packages/api/test/orders-quantity.test.mjs'],
+    },
+  };
+  for (const [name, files] of Object.entries(cases)) {
+    const guards = graders(name).filter(grader => /^no-test-(edit|write)\.md$/.test(grader.file));
+    assert.deepEqual(guards.map(grader => grader.fields.tool).sort(), ['Edit', 'Write'], `${name} guards Edit and Write`);
+    for (const { file, fields } of guards) {
+      const pattern = new RegExp(fields.input_match);
+      for (const item of files.protected) {
+        assert.match(call(`/tmp/eval/${item}`), pattern, `${name}/${file}`);
+        assert.match(call(`C:\\eval\\${item.replaceAll('/', '\\')}`), pattern, `${name}/${file} on Windows`);
+      }
+      for (const item of files.allowed) assert.doesNotMatch(call(`/tmp/eval/${item}`), pattern, `${name}/${file}`);
+      const source = files.protected[0].replace('/test/', '/src/').replace('.test.mjs', '.mjs');
+      assert.doesNotMatch(call(`/tmp/eval/${source}`, { content: `// see ${files.protected[0]}` }), pattern, `${name}/${file}`);
+    }
+  }
+});
+
+test('the TAP summary is read from the final counts only', () => {
+  const output = 'TAP version 13\n# pass 9\n# fail 0\nnot ok 1 - x\n1..1\n# tests 1\n# pass 0\r\n# fail 1\n# cancelled 0\n';
+  assert.deepEqual(tapSummary(output), { tests: 1, pass: 0, fail: 1, cancelled: 0 });
+  assert.deepEqual(tapSummary(''), { tests: null, pass: null, fail: null, cancelled: null });
+});
+
+test('held-out tests pass only when every original test runs and passes', { skip, timeout: 120000 }, t => {
   const pristine = buildFixture('evidence-before-done', temporary(t));
   const untouched = copyOf(t, pristine);
   assert.match(postcheck('evidence-before-done', untouched, { pristine }).violations.join('\n'), /original tests fail/);
   const fixed = copyOf(t, pristine);
   apply(fixed, CASES['evidence-before-done'].fix);
-  assert.match(postcheck('evidence-before-done', fixed, { pristine, arm: 'with' }).violations.join('\n'), /task phase is missing/);
-  fs.mkdirSync(path.join(fixed, '.leanloop'), { recursive: true });
-  fs.writeFileSync(path.join(fixed, '.leanloop/task.json'), JSON.stringify({ phase: 'done', acceptance: [{ evidence: { text: 'ran' } }] }));
-  assert.equal(postcheck('evidence-before-done', fixed, { pristine, arm: 'with' }).ok, true);
+  assert.deepEqual(postcheck('evidence-before-done', fixed, { pristine }).violations, []);
+  // Exiting at import ends the test file before any test registers; node --test exits 0 and reports one passing test.
+  for (const source of [untouched, fixed]) {
+    const exits = copyOf(t, source);
+    apply(exits, [['src/users.mjs', /^/, 'process.exit(0);\n']]);
+    assert.equal(runNode(['--test', 'test/users.test.mjs'], exits).status, 0);
+    assert.match(postcheck('evidence-before-done', exits, { pristine }).violations.join('\n'),
+      /original tests fail.*exit 0, 1 of 4 expected tests passed, 0 failed, 1 reported/);
+  }
+  // The code under test shares node:assert with the tests; neutralising assert.throws on import must not pass.
+  const neutralised = copyOf(t, untouched);
+  apply(neutralised, [['src/users.mjs', /^/, "import assert from 'node:assert/strict';\nassert.throws = () => {};\n"]]);
+  assert.match(postcheck('evidence-before-done', neutralised, { pristine }).violations.join('\n'), /original tests fail/);
+  // A forged summary printed by the code under test comes before the real one.
+  const forged = copyOf(t, untouched);
+  apply(forged, [['src/users.mjs', /^/, "console.log('# tests 4\\n# pass 4\\n# fail 0');\n"]]);
+  assert.match(postcheck('evidence-before-done', forged, { pristine }).violations.join('\n'), /original tests fail/);
+  // A wrong fix can satisfy a text grader; the held-out tests still catch it.
+  const components = buildFixture('components-one-at-a-time', temporary(t));
+  const wrong = copyOf(t, components);
+  apply(wrong, [...CASES['components-one-at-a-time'].fix.filter(([file]) => !file.includes('billing')),
+    ['packages/billing/src/tax.mjs', 'amount + rate;', 'amount * rate;']]);
+  const billing = graders('components-one-at-a-time').find(grader => grader.file === 'billing-fixed.md');
+  assert.equal(regexPasses(billing, wrong), true);
+  assert.match(postcheck('components-one-at-a-time', wrong, { pristine: components }).violations.join('\n'),
+    /original tests fail.*packages\/billing\/test\/tax\.test\.mjs/);
+});
+
+function leanloop(workspace, args) {
+  const result = cli(workspace, args);
+  assert.equal(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout);
+}
+
+test('the ledger check applies the finish rules to a validated task and reports each violation', { skip, timeout: 120000 }, t => {
+  const pristine = buildFixture('evidence-before-done', temporary(t));
+  const fixed = copyOf(t, pristine);
+  apply(fixed, CASES['evidence-before-done'].fix);
+  const check = (workspace = fixed) => postcheck('evidence-before-done', workspace, { pristine, arm: 'with' });
+  assert.match(check().violations.join('\n'), /task phase is missing/);
+
+  leanloop(fixed, ['start', 'Validate new users', '--accept', 'Blank names and invalid ages are rejected']);
+  leanloop(fixed, ['check']);
+  leanloop(fixed, ['prove', '1', 'node --test test/users.test.mjs: 4 passed']);
+  assert.equal(leanloop(fixed, ['finish']).phase, 'done');
+  assert.deepEqual(check().violations, []);
+  const ledger = path.join(fixed, '.leanloop/task.json');
+  const real = JSON.parse(fs.readFileSync(ledger, 'utf8'));
+  const forge = task => {
+    const workspace = copyOf(t, fixed);
+    fs.writeFileSync(path.join(workspace, '.leanloop/task.json'), JSON.stringify(task));
+    return check(workspace).violations.join('\n');
+  };
+  assert.match(forge({ phase: 'done', acceptance: [{ evidence: { text: 'ran' } }] }), /not a valid LeanLoop task/);
+  assert.match(forge({ ...real, verification: null }), /no verification fingerprint/);
+  const failing = structuredClone(real);
+  failing.verification.results[0].ok = false;
+  assert.match(forge(failing), /recorded check unit did not pass/);
+  assert.match(forge({ ...real, verification: { ...real.verification, results: [] } }), /configured check unit has no recorded result/);
+  const stale = structuredClone(real);
+  stale.acceptance[0].evidence.fingerprint = 'f'.repeat(64);
+  assert.match(forge(stale), /criterion 1 evidence was recorded against a different source/);
+  assert.match(forge({ ...real, acceptance: [{ ...real.acceptance[0], evidence: null }] }), /criterion 1 has no recorded evidence/);
+  assert.match(forge({ ...real, phase: 'active' }), /task phase is active, expected done/);
+  // A fabricated fingerprint shared by verification and evidence is consistent, but not with the final source.
+  const fabricated = structuredClone(real);
+  fabricated.verification.fingerprint = 'a'.repeat(64);
+  fabricated.acceptance[0].evidence.fingerprint = 'a'.repeat(64);
+  assert.match(forge(fabricated), /recorded verification does not match the final source/);
+  const { base, ...baseless } = real;
+  assert.ok(base);
+  assert.match(forge(baseless), /no recorded base/);
+  // finish's review rule applies: high risk, or an integrity finding such as an edited test, needs a current review.
+  assert.match(forge({ ...real, risk: 'high' }), /a review is required/);
+  const weakened = copyOf(t, fixed);
+  apply(weakened, [['test/users.test.mjs', "test('rejects a fractional age'", "test.skip('rejects a fractional age'"]]);
+  const ledgerFor = workspace => JSON.parse(fs.readFileSync(path.join(workspace, '.leanloop/task.json'), 'utf8'));
+  const resealed = ledgerFor(weakened);
+  resealed.verification.fingerprint = fingerprint(weakened);
+  resealed.acceptance[0].evidence.fingerprint = resealed.verification.fingerprint;
+  fs.writeFileSync(path.join(weakened, '.leanloop/task.json'), JSON.stringify(resealed));
+  assert.match(check(weakened).violations.join('\n'), /a review is required/);
+
   const question = buildFixture('question-stays-read-only', temporary(t));
   fs.mkdirSync(path.join(question, '.leanloop'), { recursive: true });
   fs.writeFileSync(path.join(question, '.leanloop/task.json'), JSON.stringify({ phase: 'active', acceptance: [] }));

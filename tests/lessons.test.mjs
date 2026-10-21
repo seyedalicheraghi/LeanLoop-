@@ -61,6 +61,30 @@ test('lessons must be single-line, evidence-backed, and never drop hand-written 
   assert.notEqual(cli(missing, ['learn', 'x', '--evidence', 'y']).status, 0);
 });
 
+test('lesson files saved with a BOM or CRLF endings are read, and rewritten as LF without a BOM', async t => {
+  const root = await fixture(t);
+  await run(root, ['learn', 'First lesson.', '--evidence', 'check', '--anchor', 'src/app.mjs']);
+  await run(root, ['learn', 'Second lesson.', '--evidence', 'check']);
+  const file = path.join(root, LESSONS_FILE);
+  const lf = fs.readFileSync(file, 'utf8');
+  for (const content of [`\uFEFF${lf}`, lf.replace(/\n/g, '\r\n'), `\uFEFF${lf.replace(/\n/g, '\r\n')}`]) {
+    fs.writeFileSync(file, content);
+    const listed = await run(root, ['lessons']);
+    assert.deepEqual(listed.lessons.map(item => [item.id, item.text, item.anchor]),
+      [[1, 'First lesson.', 'src/app.mjs'], [2, 'Second lesson.', undefined]]);
+    assert.equal(fs.readFileSync(file, 'utf8'), content, 'reading must not rewrite the file');
+    await run(root, ['learn', 'Third lesson.', '--evidence', 'check']);
+    const rewritten = fs.readFileSync(file, 'utf8');
+    assert.ok(!rewritten.startsWith('\uFEFF') && !rewritten.includes('\r'));
+    assert.equal(rewritten, `${lf}${/- L3 .*\n$/.exec(rewritten)[0]}`);
+    await run(root, ['forget', '3']);
+    assert.equal(fs.readFileSync(file, 'utf8'), lf);
+  }
+  // A carriage return inside a line is still not a lesson entry.
+  fs.writeFileSync(file, lf.replace('First lesson.', 'First\rlesson.'));
+  await assert.rejects(run(root, ['lessons']), error => error.code === 'CORRUPT_DATA');
+});
+
 test('recording a lesson does not invalidate fresh verification evidence', async t => {
   const root = await fixture(t);
   commit(root);

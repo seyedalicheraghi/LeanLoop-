@@ -18,23 +18,28 @@ assert.equal(manifest.private, true);
 // No hooks, MCP servers, or PATH additions: the plugin only ships on-demand instructions and a reviewer.
 for (const absent of ['hooks', '.mcp.json', 'bin', 'commands', 'settings.json']) assert.equal(fs.existsSync(path.join(root, absent)), false, absent);
 
-const SKILLS = ['work', 'setup', 'audit'];
+const SKILLS = ['work', 'setup', 'audit', 'review'];
 assert.deepEqual(fs.readdirSync(path.join(root, 'skills')).sort(), [...SKILLS].sort());
 const skills = Object.fromEntries(SKILLS.map(name => [name, read(`skills/${name}/SKILL.md`)]));
 for (const [name, skill] of Object.entries(skills)) {
-  const header = new RegExp(`^---\\nname: ${name}\\ndescription: "([^"\\n]+)"\\n(?:argument-hint: "[^"\\n]+"\\n|disable-model-invocation: true\\n)?license: MIT\\n---\\n`).exec(skill);
-  assert.ok(header, `skills/${name}/SKILL.md frontmatter must be name, quoted description, an optional hint or opt-in flag, and license.`);
+  const header = new RegExp(`^---\\nname: ${name}\\ndescription: "([^"\\n]+)"\\n(?:argument-hint: "[^"\\n]+"\\n)?(?:disable-model-invocation: true\\n)?license: MIT\\n---\\n`).exec(skill);
+  assert.ok(header, `skills/${name}/SKILL.md frontmatter must be name, quoted description, an optional hint and opt-in flag, and license.`);
   assert.ok(header[1].length <= 300, `${name}: keep the always-listed description short.`);
   assert.match(skill, /\$\{CLAUDE_PLUGIN_ROOT\}\/leanloop\.mjs/, `${name} must call the plugin's bundled CLI.`);
 }
+assert.deepEqual(fs.readdirSync(path.join(root, 'agents')).sort(), ['code-reviewer.md', 'leanloop-reviewer.md']);
 const reviewer = read('agents/leanloop-reviewer.md');
 assert.match(reviewer, /^---\nname: leanloop-reviewer\ndescription: "[^"\n]+"\ntools: Read, Grep, Glob\n---\n/);
-assert.doesNotMatch(reviewer, /^(model|hooks|mcpServers|permissionMode):/m);
+// The general reviewer may run read-only git and, when allowed, project tests, but can never write files or use the network.
+const codeReviewer = read('agents/code-reviewer.md');
+assert.match(codeReviewer, /^---\nname: code-reviewer\ndescription: "[^"\n]{1,300}"\ntools: Read, Grep, Glob, Bash\ndisallowedTools: Write, Edit, NotebookEdit, WebFetch, WebSearch\neffort: high\n---\n/);
+for (const agent of [reviewer, codeReviewer]) assert.doesNotMatch(agent, /^(model|hooks|mcpServers|permissionMode):/m);
 const bytes = text => Buffer.byteLength(text);
 const coreBytes = bytes(skills.work) + bytes(reviewer);
-const allBytes = Object.values(skills).reduce((sum, skill) => sum + bytes(skill), bytes(reviewer));
+const allBytes = Object.values(skills).reduce((sum, skill) => sum + bytes(skill), bytes(reviewer) + bytes(codeReviewer));
 assert.ok(coreBytes <= 8192, 'The work skill and reviewer exceed their combined 8 KiB budget.');
-assert.ok(allBytes <= 12288, 'All skills plus the reviewer exceed their 12 KiB budget.');
+assert.ok(bytes(codeReviewer) <= 8192, 'The code reviewer exceeds its 8 KiB budget.');
+assert.ok(allBytes <= 20480, 'All skills and agents exceed their 20 KiB budget.');
 // Invisible tag, zero-width, and bidirectional control characters can hide instructions (see SOURCES.md).
 const HIDDEN = /[\u{E0000}-\u{E007F}\u200B-\u200D\u2060\u202A-\u202E\u2066-\u2069\uFEFF]/u;
 
@@ -42,7 +47,7 @@ let scripts = 0;
 let markdownFiles = 0;
 function walk(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    if (['node_modules', '.git', '.leanloop', 'dist'].includes(entry.name)) continue;
+    if (['node_modules', '.git', '.leanloop', 'dist', 'README-REVIEW.md'].includes(entry.name)) continue;
     const file = path.join(directory, entry.name);
     assert.equal(entry.isSymbolicLink(), false, `Unexpected package symlink: ${file}`);
     if (entry.isDirectory()) walk(file);
@@ -74,7 +79,7 @@ if (denylist) {
   const hits = [];
   const scan = directory => {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-      if (['node_modules', '.git', '.leanloop', 'dist'].includes(entry.name)) continue;
+      if (['node_modules', '.git', '.leanloop', 'dist', 'README-REVIEW.md'].includes(entry.name)) continue;
       const file = path.join(directory, entry.name);
       if (entry.isDirectory()) scan(file);
       else if (entry.isFile()) {
@@ -101,5 +106,5 @@ try {
 }
 process.stdout.write(`${JSON.stringify({
   ok: true, syntaxCheckedScripts: scripts, markdownFiles, coreBytes, coreBudgetBytes: 8192,
-  allSkillBytes: allBytes, allSkillBudgetBytes: 12288, dependencies: 0, privateTermsChecked, claudeValidate,
+  allCustomizationBytes: allBytes, allCustomizationBudgetBytes: 20480, codeReviewerBytes: bytes(codeReviewer), dependencies: 0, privateTermsChecked, claudeValidate,
 })}\n`);

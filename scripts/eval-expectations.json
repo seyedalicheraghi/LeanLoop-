@@ -70,6 +70,9 @@
   "question-stays-read-only": {
     "unchanged": [],
     "allowed": [],
+    "heldOut": [
+      "test/duration.test.mjs"
+    ],
     "ledger": {
       "noTask": true
     }
