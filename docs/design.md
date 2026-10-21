@@ -37,7 +37,7 @@ law that one agent always wins. Measure it on your own tasks with
 
 1. **On-demand instructions:** the skill defines localization, delegation,
    verification, memory, and concise reporting. These remain model-followed
-   guidance. Supported hosts discover skill metadata and load the body on
+   guidance. Claude Code lists skill descriptions and loads the body on
    activation; discovery alone does not guarantee that a matching task invokes it.
 2. **Local deterministic bookkeeping:** the CLI stores task state, executes chosen
    checks, bounds outputs, keeps a capped lessons file, inventories possible
@@ -141,11 +141,23 @@ another index or make a nested `node --test` skip discovery. Removed variable
 names, never their values, are recorded in the result. Intentional project
 environment such as `NODE_OPTIONS` remains the operator's responsibility.
 
-Each check owns a POSIX process group. Timeout, interruption, and normal cleanup
-terminate that group, including ordinary descendants. A process deliberately
-escaping into another session, a remote job, or an uninterruptible kernel wait
-is outside this guarantee. Host termination with SIGKILL cannot run cleanup.
-Windows process-tree behavior is unsupported.
+On Linux and macOS each check owns a POSIX process group. Timeout, interruption,
+and normal cleanup terminate that group, including ordinary descendants. A
+process deliberately escaping into another session, a remote job, or an
+uninterruptible kernel wait is outside this guarantee. Host termination with
+SIGKILL cannot run cleanup.
+
+Windows has no process groups. A check runs as an ordinary child; stopping it
+runs `taskkill /T /F` on the live tree, then a PowerShell CIM query finds
+descendants that outlived their parent and stops them too. Only processes
+created after the check started count, and the root's direct children must
+predate its exit, so a reused PID cannot widen the sweep. If the sweep cannot
+run, the check fails with a cleanup error rather than passing. `.cmd` and `.bat`
+programs (npm, npx, pnpm) cannot be spawned without a shell, so they run through
+`cmd.exe /d /s /c` with every argument quoted; arguments containing `"`, `%`,
+`!`, or line breaks are refused because `cmd.exe` would reinterpret them. Checks
+are not started detached on Windows: a detached `cmd.exe` loses its children's
+inherited output pipes.
 
 Checks stop after the first failure. Unknown executables, nonzero exits, timeout,
 interruption, missing expected output, and output-write/cleanup errors are failures.
@@ -165,6 +177,45 @@ at completion.
 Acceptance and review entries are explicitly labeled operator attestations.
 Different reviewer strings are required, but identities are not authenticated.
 A model can still make a false claim; the owner must supply inspectable evidence.
+
+A failed check's result carries the last 1,500 bytes of its output (stderr if it
+wrote any, otherwise stdout), labeled as untrusted project data. Agents rarely
+page through truncated output, so the failure has to travel with the result;
+the full bounded logs stay in `.leanloop/logs/`.
+
+## Integrity, escalation, and history
+
+Agents under pressure edit or delete tests, special-case test inputs, or weaken
+checks to get a pass (see [SOURCES.md](../SOURCES.md)). `start` records the HEAD
+commit and a digest of the configured checks and `testPaths`. `status` and
+`finish` compare the tracked files against that commit, with staged and
+worktree changes included. A modified, deleted, or retyped file that matches a
+test pattern, or any change to the checks or `testPaths`, makes `finish` require
+an approving review recorded on the final source (`INTEGRITY_REVIEW_REQUIRED`).
+New test files do not. The review requirement does not prove the change is
+wrong; it makes a second reader look at it.
+
+Limits: a task started in an empty repository has no base commit and reports
+the integrity check as unavailable. Untracked files that existed at `start` and
+were later edited are not detected. Special-casing in source code, hard-coded
+results, and new skip markers are invisible to this gate; the reviewer is told
+to look for them. Tasks started before 0.5.0 have no base and are not gated.
+
+`escalate KIND SUMMARY --tried TEXT --recommend TEXT` stops a task with a
+structured record: a conflict between tests and the specification, an exhausted
+budget, missing access, or unclear scope. It moves the task to `blocked` and
+shows the record in `status`. When the attempt budget runs out, the error points
+to `escalate` before `extend`. In one controlled study, an escalation channel
+plus a written policy cut test hacking from 23.6% to 5.3%; that result came from
+nine problems and does not transfer automatically.
+
+Each check run appends a bounded history entry (at most 100 per task) with name,
+result, exit code, and a short fingerprint. `status` derives `observedFailToPass`:
+checks that failed earlier in the task and pass on the current source, which is
+the red-then-green evidence for a bug fix. It is reported, not required, because
+many bugs cannot be reproduced by a test. Checkpoints store the last check
+result beside the owner's summary, since a summary written before compaction is
+a claim, not evidence.
 
 ## Bounded project memory
 
@@ -187,76 +238,92 @@ size, not their truth. Reads enforce the same 30-entry/8 KiB caps. If hand edits
 exceed them, curate the file before using the CLI; it will not silently discard
 entries or load oversized memory.
 
+Studies of coding-agent memory found that every memory system tested broke some
+tasks the agent would otherwise solve, mostly by applying old experience where it
+no longer fit. So lessons are hints: the skill tells the owner to confirm a
+lesson against the current files, to record only lessons backed by a check it
+ran, and never to store shortcuts that skip tests or text taken from external
+content. `learn` refuses near-duplicates (differing only in case, spacing, or
+trailing punctuation). `--anchor PATH` ties a lesson to a file that must exist;
+`lessons` lists anchored lessons whose path has disappeared as `stale`.
+
 ## Overhead audit
 
-`audit` reads only customization files and file metadata, works without Git or
-this kit's configuration, never writes, and never follows symlinks. It reports:
-potential root-instruction bytes; custom agents, their declared handoff graph,
-delegation tools, and model choices; broadly matched command hooks; MCP servers;
-memory-like files (learnings, lessons, ledgers, journals, session logs); and files
-over 32 KiB mentioned in instructions. These are structural indicators, not a
-trace of what a host loaded, executed, cached, or billed. A delegation-capable
-agent is not necessarily a router; a mentioned file need not be read in full.
-User-level and inherited host settings are outside the audit's scope.
+`audit` inventories what Claude Code loads for a project. It reads only
+customization files and file metadata, works without Git or LeanLoop
+configuration, never writes, and never follows symlinks.
 
-Customization reads are bounded to 1 MiB per file and 8 MiB total, with up to
-2,000 entries per customization directory. Inventory stops at 300,000 paths
-(filesystem fallback counts directory entries too); nested guide metadata is
-sampled up to 5,000 with explicit totals/truncation. Oversize files, inaccessible
-or symlinked managed paths, and malformed settings are reported in `skipped`.
-Git failures are not silently converted into a filesystem scan; non-Git and
-nested directories use an explicitly labelled filesystem inventory.
+- **Always-on text:** `CLAUDE.md`, `.claude/CLAUDE.md`, and `CLAUDE.local.md`;
+  files they `@import` (relative to the importing file, up to four hops,
+  ignoring imports inside code, stopping cycles; imports outside the project are
+  listed but not read); `.claude/rules` files without a `paths` field; and
+  `CLAUDE.md` or `.claude/CLAUDE.md` in every parent folder up to the
+  filesystem root, which covers `~/.claude/CLAUDE.md` for projects under your
+  home folder.
+- **On demand:** nested `CLAUDE.md` files and rules with `paths`.
+- **Components:** `.claude/agents`, `.claude/skills`, `.claude/commands`,
+  hooks and permissions in `.claude/settings.json` and `settings.local.json`,
+  and `.mcp.json` servers.
 
-`complete: false` and a nonzero exit expose incomplete inspection, even with no
-high-severity findings. Frontmatter/TOML handling recognizes simple declarations;
-it is not a full host configuration validator. JSONC is reported as unparsed.
-Most detail lists have at most 10 entries, and serialized JSON plus newline is
-limited to 16 KiB. When long paths still exceed that bound, detail lists shrink
-and `output.truncated` is true; counts, findings, and completeness remain visible.
-Names retain their exact identity during counting/graph analysis and are shortened
-only for display. Same-named agents in different discovery directories do not
-silently replace each other.
+| Finding | Severity |
+|---|---|
+| `ALWAYS_ON_LARGE` | medium over 8 KiB, high over 16 KiB of always-on text |
+| `LONG_INSTRUCTION_FILE` | low: an always-on file over 200 lines (Claude Code's own guidance) |
+| `MANY_AGENTS`, `ROUTER_AGENT` | medium: more than 4 agents; agents that can launch agents |
+| `AGENTS_WITH_ALL_TOOLS` | low: an agent without a `tools` list inherits every tool |
+| `PINNED_MODELS` | info |
+| `PER_TOOL_HOOKS` | medium for 1-4, high for 5 or more broadly matched tool hooks |
+| `RISKY_HOOK` | medium: a hook fetches from the network, pipes into an interpreter, or runs an unpinned npx/uvx/pipx package |
+| `MCP_UNPINNED`, `MCP_REMOTE`, `MANY_MCP_SERVERS` | medium, info, low |
+| `MCP_INLINE_SECRET` | high: a literal secret-looking value; only the key name is reported |
+| `BROAD_PERMISSIONS` | high for `bypassPermissions` or a bare `Bash`/`*` allow rule; medium for enabling all project MCP servers |
+| `HIDDEN_UNICODE` | high: invisible tag, zero-width, or bidirectional control characters; file and count only |
+| `INJECTION_LIKE` | low: phrases such as "ignore previous instructions"; file and line numbers only |
+| `MEMORY_UNBOUNDED`, `LARGE_REFERENCED_FILES` | memory-like files and large files referenced from instructions |
+| `NO_TEST_COMMAND` | info: no always-on text names a test command |
 
-Thresholds are heuristics chosen from the evidence above, not provider limits:
-always-on text over 8 KiB is medium and over 16 KiB high; a handoff chain of 3
-agents is medium and of 4 or more high; 1-4 per-tool hook commands are medium and
-5 or more high; memory over 32 KiB is medium and over 128 KiB high. Tokens are
-estimated as bytes/4. The longest declared handoff path is a bounded, iterative
-search over simple paths; `chainExact: false` marks a capped search. Neither a
-declared path nor a high heuristic severity proves wasted time. Audit advice
-must preserve authorization, secret protection, and destructive-action guards.
+These are structural indicators, not a trace of what Claude Code loaded,
+executed, cached, or billed, and not a malware scanner: the security findings
+catch common patterns and miss deliberate disguises. Research found that the
+size and position of instruction files did not measurably change adherence, so
+size findings describe recurring context cost, not quality. Audit advice must
+preserve authorization, secret protection, and destructive-action guards.
 
-## Installation and update contract
+Reads are bounded to 1 MiB per file and 8 MiB in total, with up to 2,000
+entries per customization directory. Oversize files, symlinks, inaccessible
+paths, and malformed settings are listed in `skipped` and make
+`complete: false` with exit 1, so a missing piece of evidence is never mistaken
+for a clean result. A symlinked `~/.claude` folder therefore makes every audit
+incomplete; that is the cost of never following symlinks. Detail lists hold at
+most 10 entries, and serialized JSON plus newline is limited to 16 KiB; when
+long paths still exceed that, lists shrink first and `output.truncated` is set.
+File contents never appear in the output. Tokens are estimated as bytes/4.
 
-Hosts decide where the skill and reviewer go. `portable` (the default) installs
-the skill in `.agents/skills/`, which Copilot (VS Code, CLI, cloud agent), Codex,
-and Gemini CLI discover, plus the Copilot reviewer in `.github/agents/`. `copilot`
-keeps the 0.1.0 layout in `.github/skills/`. `claude` installs `.claude/skills/`
-and a Claude-format reviewer in `.claude/agents/`, generated from the same source
-by rewriting only its tools line. The registry records the chosen hosts; a later
-`init` without `--host` keeps them, and a 0.1.0 registry without hosts is treated
-as `copilot`. Changing hosts retires the old files, so it needs `--upgrade`, and
-only unmodified files move. Empty folders left inside a retired skill folder are
-removed after a successful upgrade.
+## Packaging and project setup
 
-The installer preflights all managed paths, refuses symlinked destinations and
-conflicting contents, and publishes complete new files exclusively. Reinstallation
-preserves an existing valid check configuration. The install registry records
-digests only for owned assets, not project configuration. Explicit `--upgrade`
-can replace or retire a registered file only if its contents still match its
-recorded digest. Modified assets block the whole preflight. Unrelated files are
-never rewritten. Failed writes attempt to restore this attempt's changes, report
-rollback errors, and may leave empty directories.
+LeanLoop is a Claude Code plugin. The repository root is the plugin:
+`.claude-plugin/plugin.json` names it, and `.claude-plugin/marketplace.json`
+publishes it with `source: "./"`. Claude Code discovers `skills/work`,
+`skills/setup`, `skills/audit`, and `agents/leanloop-reviewer.md` by convention.
+Skills call the bundled CLI through `${CLAUDE_PLUGIN_ROOT}/leanloop.mjs`, which
+Claude Code substitutes in skill text. The plugin root changes on every update,
+so no state is written there. The plugin ships no hooks, MCP servers, `bin/`
+PATH additions, settings, or permission rules; validation fails if any appear.
 
-The installer is not hardened against a hostile process changing filesystem paths
-concurrently. Run it in a trusted project without concurrent customization edits.
-It does not merge user edits automatically. Preview upgrades, then back up,
-compare, and reconcile conflicts deliberately. No registry means no automatic
-claim of ownership over different existing contents.
+Every enabled plugin adds its skill and agent descriptions to each session, so
+descriptions stay short, and `setup` and `audit` are user-invoked only
+(`disable-model-invocation`). The work skill plus the reviewer stay within 8 KiB
+and all skills plus the reviewer within 12 KiB. The reviewer's `tools` list
+(Read, Grep, Glob) keeps it read-only; a plugin agent cannot change its own
+permission mode.
 
-No project or user instruction hierarchy is overridden. A plugin manifest is
-packaging, not proof that every client loads all components. Test discovery in the
-selected host; file-based installation is the primary supported path.
+`init` creates only `leanloop.json` (when absent) and `.leanloop/.gitignore`,
+publishing each file exclusively under the project lock. It validates an
+existing configuration instead of replacing it, refuses a symlinked state
+directory or a modified state ignore file, and changes nothing else. It refuses
+a project that still has a pre-rename lean-workflow install. Copies that 0.4.0
+vendored into projects are reported as duplicates of the plugin and left for
+you to remove. No project or user instruction hierarchy is overridden.
 
 ## Output and attention
 

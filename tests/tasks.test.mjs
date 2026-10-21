@@ -4,9 +4,9 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   cancel, checkpoint, extendBudget, finish, recordProof, recordReview, startTask, status, verify,
-} from '../skills/leanloop/scripts/lib/tasks.mjs';
-import { atomicJson, withLock } from '../skills/leanloop/scripts/lib/io.mjs';
-import { fingerprint } from '../skills/leanloop/scripts/lib/git.mjs';
+} from '../lib/tasks.mjs';
+import { atomicJson, withLock } from '../lib/io.mjs';
+import { fingerprint } from '../lib/git.mjs';
 import { fixture, commit, git, cli } from './helpers.mjs';
 
 const request = { goal: 'Preserve the answer', criteria: ['The answer is 42'], scope: ['src'] };
@@ -81,6 +81,8 @@ test('untracked files and permission changes invalidate a fingerprint', async t 
   fs.writeFileSync(path.join(root, 'new.mjs'), '42;\n', { mode: 0o644 });
   const added = fingerprint(root);
   assert.notEqual(added, before);
+  // Windows has no execute bit; chmod there only toggles read-only.
+  if (process.platform === 'win32') return;
   fs.chmodSync(path.join(root, 'new.mjs'), 0o755);
   assert.notEqual(fingerprint(root), added);
 });

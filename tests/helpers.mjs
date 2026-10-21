@@ -3,17 +3,28 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { install } from '../lib/install.mjs';
-import { atomicJson } from '../skills/leanloop/scripts/lib/io.mjs';
+import { init } from '../lib/init.mjs';
+import { atomicJson } from '../lib/io.mjs';
 
 export const rootDirectory = fileURLToPath(new URL('../', import.meta.url));
-export const cliPath = path.join(rootDirectory, 'bin/leanloop.mjs');
-export const SKILL_DIR = '.agents/skills/leanloop';
+export const cliPath = path.join(rootDirectory, 'leanloop.mjs');
 
 export function temporary(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'leanloop-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   return root;
+}
+
+// Directory links use junctions on Windows, which need no privilege; file links skip there without one.
+export function link(t, target, location, type = 'file') {
+  try {
+    fs.symlinkSync(target, location, process.platform === 'win32' && type === 'dir' ? 'junction' : type);
+    return true;
+  } catch (error) {
+    if (process.platform !== 'win32' || error.code !== 'EPERM') throw error;
+    t.skip('File symlinks on Windows need Developer Mode or administrator rights.');
+    return false;
+  }
 }
 
 export function git(root, args) {
@@ -29,7 +40,7 @@ export async function fixture(t, checks = [{ name: 'test', command: [process.exe
   git(root, ['init', '--initial-branch=main']);
   fs.mkdirSync(path.join(root, 'src'));
   fs.writeFileSync(path.join(root, 'src/app.mjs'), 'export const answer = 42;\n');
-  await install(root);
+  await init(root);
   atomicJson(root, 'leanloop.json', { version: 1, attemptLimit: 3, checks });
   return root;
 }

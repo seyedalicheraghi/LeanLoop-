@@ -4,8 +4,8 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as wait } from 'node:timers/promises';
 import test from 'node:test';
-import { atomicJson, readJson } from '../skills/leanloop/scripts/lib/io.mjs';
-import { startTask } from '../skills/leanloop/scripts/lib/tasks.mjs';
+import { atomicJson, readJson } from '../lib/io.mjs';
+import { startTask } from '../lib/tasks.mjs';
 import { fixture, cli, cliPath } from './helpers.mjs';
 
 test('lock recovery refuses live and mismatched owners', async t => {
@@ -36,7 +36,9 @@ test('recovery of a dead owner invalidates interrupted verification state', asyn
   assert.equal(fs.existsSync(path.join(root, '.leanloop/lock.json')), false);
 });
 
-test('SIGTERM stops the check, records failure, and releases the lock', { timeout: 10000 }, async t => {
+test('SIGTERM stops the check, records failure, and releases the lock', {
+  timeout: 10000, skip: process.platform === 'win32' && 'Windows cannot deliver SIGTERM to a handler; recover covers abrupt exits',
+}, async t => {
   const code = "require('fs').writeFileSync('.leanloop/check-started', String(process.pid)); setInterval(() => {}, 1000);";
   const root = await fixture(t, [{ name: 'long', command: [process.execPath, '-e', code], timeoutSeconds: 5 }]);
   await startTask(root, { goal: 'Interrupt a check', criteria: ['Interruption cannot be success'] });

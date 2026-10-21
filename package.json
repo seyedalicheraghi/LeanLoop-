@@ -1,7 +1,7 @@
 {
   "name": "leanloop-kit",
-  "version": "0.4.0",
-  "description": "A local, single-owner engineering workflow for AI coding agents: bounded context, bounded memory, overhead audit, and evidence-based completion.",
+  "version": "0.5.0",
+  "description": "A Claude Code plugin for single-owner, evidence-gated engineering: bounded context and memory, test-integrity review, and a setup overhead audit.",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -9,17 +9,17 @@
     "node": ">=22"
   },
   "bin": {
-    "leanloop": "bin/leanloop.mjs"
+    "leanloop": "leanloop.mjs"
   },
   "files": [
-    "bin/",
+    ".claude-plugin/",
+    "leanloop.mjs",
     "lib/",
     "skills/",
     "agents/",
     "docs/",
     "scripts/",
     "tests/",
-    "plugin.json",
     "AGENTS.md",
     "README.md",
     "SOURCES.md",

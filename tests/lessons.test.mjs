@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { execute } from '../skills/leanloop/scripts/lib/cli.mjs';
-import { LESSONS_FILE, MAX_LESSONS } from '../skills/leanloop/scripts/lib/lessons.mjs';
+import { execute } from '../lib/cli.mjs';
+import { LESSONS_FILE, MAX_LESSONS } from '../lib/lessons.mjs';
 import { fixture, temporary, cli, commit, git } from './helpers.mjs';
 
 const run = (root, args) => execute([args[0], '--project', root, ...args.slice(1)]);

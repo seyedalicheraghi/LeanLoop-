@@ -1,5 +1,23 @@
 # Validation record
 
+## 0.5.0 Claude Code plugin (2026-10-20)
+
+| Check | Observed result |
+|---|---|
+| `npm test`, Windows 11, Node 24.13.1 | 115 tests: 111 passed, 0 failed, 4 skipped (3 need file-symlink privilege; SIGTERM cannot reach a handler on Windows) |
+| `npm test`, WSL Ubuntu 24.04, Node 18.19.1 (below the declared Node 22 engine) | 115 tests: 114 passed, 0 failed, 1 skipped (the Windows-only `.cmd` test) |
+| New regression tests | Integrity gate (edited, deleted, and committed test changes; changed checks; `testPaths`), escalation, failure excerpts, checkpoint evidence, fail-to-pass history, lesson duplicates and anchors, plugin-mode `init`, orphaned-grandchild cleanup, Windows `.cmd` quoting, and the rewritten audit |
+| `npm run validate` | 31 scripts; no dependencies; work skill plus reviewer 6,201 / 8,192 bytes; all skills plus reviewer 8,802 / 12,288 bytes; no invisible Unicode |
+| `claude plugin validate --strict` (Claude Code 2.1.270) | Plugin manifest, marketplace manifest, skills, and agent passed |
+| Plugin install smoke test | With a throwaway `CLAUDE_CONFIG_DIR`, `claude plugin marketplace add` and `claude plugin install leanloop@leanloop` succeeded; `claude plugin details` listed 3 skills, 1 agent, 0 hooks, 0 MCP servers, and about 183 always-on tokens per session |
+| CLI on Windows | `init`, `doctor`, and an `npm test` check (through `cmd.exe`) ran natively |
+| Private-term validation | 14 externally stored terms checked against the files to be committed; no hits |
+| arXiv citations | All 52 IDs in SOURCES.md matched arXiv's own metadata |
+
+Not done: no session ran Claude through the plugin's skills end to end, and no
+evaluation compared outcomes with and without LeanLoop. The benchmarks were not
+rerun; the context and fingerprint code they measure did not change.
+
 ## 0.4.0 rename to LeanLoop (2026-10-20)
 
 Only names, paths, and the pre-rename install guard changed. Verified on WSL

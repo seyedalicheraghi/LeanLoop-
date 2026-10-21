@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { temporary, git, cli, SKILL_DIR } from './helpers.mjs';
+import { temporary, git, cli, cliPath } from './helpers.mjs';
 
 test('installed CLI reproduces a real bug, validates the fix, and resumes across processes', t => {
   const root = temporary(t);
@@ -24,10 +24,10 @@ test('valid and default limits are preserved', () => {
   const install = cli(root, ['init']);
   assert.equal(install.status, 0, install.stderr);
   const added = cli(root, ['add-check', 'unit', '--expect-output', '# tests 2',
-    '--', process.execPath, '--test', 'tests/pagination.test.mjs']);
+    '--', process.execPath, '--test', '--test-reporter=tap', 'tests/pagination.test.mjs']);
   assert.equal(added.status, 0, added.stderr);
 
-  const runtime = path.join(root, SKILL_DIR, 'scripts/workflow.mjs');
+  const runtime = cliPath;
   function invoke(args, expected = 0) {
     const result = spawnSync(process.execPath, [runtime, args[0], '--project', root, ...args.slice(1)], {
       encoding: 'utf8', timeout: 20000,
@@ -58,6 +58,8 @@ test('valid and default limits are preserved', () => {
   invoke(['review', '--by', 'fixture-independent-review', '--decision', 'approve',
     '--evidence', 'Synthetic review attestation for integration-test purposes.']);
   assert.equal(invoke(['finish']).phase, 'done');
-  assert.equal(invoke(['status']).verification.fresh, true);
+  const final = invoke(['status']);
+  assert.equal(final.verification.fresh, true);
+  assert.deepEqual(final.observedFailToPass, ['unit']);
   assert.equal(fs.existsSync(path.join(root, '.leanloop/lock.json')), false);
 });

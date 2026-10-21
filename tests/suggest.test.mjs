@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { install } from '../lib/install.mjs';
-import { suggestChecks } from '../skills/leanloop/scripts/lib/suggest.mjs';
-import { temporary, git, cli } from './helpers.mjs';
+import { init } from '../lib/init.mjs';
+import { suggestChecks } from '../lib/suggest.mjs';
+import { temporary, git, cli, link } from './helpers.mjs';
 
 test('doctor suggests real project commands but never configures them', async t => {
   const root = temporary(t);
   git(root, ['init', '--initial-branch=main']);
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { test: 'node --test', lint: 'eslint .' } }));
   fs.writeFileSync(path.join(root, 'pyproject.toml'), '[tool.pytest.ini_options]\naddopts = "-q"\n');
-  await install(root);
+  await init(root);
   const before = fs.readFileSync(path.join(root, 'leanloop.json'), 'utf8');
   const result = cli(root, ['doctor']);
   assert.equal(result.status, 1, 'no configured checks is still not ready');
@@ -63,6 +63,6 @@ test('suggestions reject ambiguous lockfiles and do not follow symlinks', t => {
   fs.unlinkSync(path.join(root, 'yarn.lock'));
   fs.unlinkSync(path.join(root, 'pnpm-lock.yaml'));
   fs.writeFileSync(path.join(outside, 'lock.yaml'), '');
-  fs.symlinkSync(path.join(outside, 'lock.yaml'), path.join(root, 'pnpm-lock.yaml'));
+  if (!link(t, path.join(outside, 'lock.yaml'), path.join(root, 'pnpm-lock.yaml'))) return;
   assert.throws(() => suggestChecks(root), /symlink/);
 });

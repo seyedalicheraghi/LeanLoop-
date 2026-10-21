@@ -1,26 +1,24 @@
 # LeanLoop
 
-**One engineering owner. Small context. Evidence before "done".**
+**One owner. Small context. Evidence before "done".**
 
-A small, independently written workflow kit for AI coding agents: GitHub Copilot
-(VS Code, CLI, cloud agent), OpenAI Codex, Gemini CLI, and Claude Code. It installs
-one on-demand skill, an optional read-only reviewer, and a local Node CLI. It adds
-no model calls, API client, server, runtime dependencies, telemetry, or hooks.
-Your existing agent still does the engineering.
+LeanLoop is a Claude Code plugin. It gives Claude one working method for code
+changes and a small local CLI that refuses to call a task done until checks
+passed on the current source, every acceptance criterion has evidence, and any
+edited test or check has been reviewed. It ships three skills, one read-only
+reviewer agent, and the CLI. It adds no hooks, MCP servers, model calls,
+telemetry, dependencies, or background processes. Claude still does the work.
 
-It replaces role-chained multi-agent setups (planner → coder → tester → reviewer →
-reporter) with one owner that keeps the whole task in one context, verifies with
-real commands, and keeps memory bounded. See [design](docs/design.md) for the
-evidence behind that choice.
+It replaces role-chained multi-agent setups (planner → coder → tester →
+reviewer → reporter) with one owner that keeps the task in one context, verifies
+with real commands, and keeps memory bounded. The [design](docs/design.md) and
+[sources](SOURCES.md) explain the evidence behind each choice.
 
-This is a workflow and evidence tool, not a replacement agent, sandbox, automated
-review service, or promise of cheaper or correct results. It is original,
-general-purpose code: no private project implementation or employer branding is
-included. Package contents and licensing do not by themselves determine legal
-ownership of work.
+LeanLoop is cooperative evidence bookkeeping. It is not a sandbox, a security
+boundary, an authenticated review system, or proof that tests are good.
 
-LeanLoop was called lean-workflow until 0.4.0. To move an existing install, see
-[Moving from lean-workflow](docs/migration.md#moving-from-lean-workflow).
+LeanLoop was called lean-workflow until 0.4.0 and supported other agents until
+0.5.0. See [migration](docs/migration.md) to move an existing install.
 
 ## Based on
 
@@ -29,288 +27,195 @@ LeanLoop is based on two public projects:
 - **[ayghri/i-have-adhd](https://github.com/ayghri/i-have-adhd)** (MIT), a skill
   that stops coding agents from burying the answer. LeanLoop's reporting style
   comes from it: outcome first, numbered steps, one next action, short lists.
-  It also showed that one skill folder (`.agents/skills/`) can serve many hosts.
 - **[WorldFlowAI/everything-claude-code](https://github.com/worldflowai/everything-claude-code)**,
   a Claude Code toolkit of agents, commands, skills, rules, and hooks, which builds
   on [affaan-m/everything-claude-code](https://github.com/affaan-m/everything-claude-code)
-  (MIT). LeanLoop keeps the ideas behind its reusable skills and its verify,
-  checkpoint, and learn workflows, as bounded local commands. It leaves out the
-  role agents, broad hooks, and memory that only grows.
+  (MIT). LeanLoop keeps the ideas behind its plugin packaging, reusable skills,
+  and verify, checkpoint, and learn workflows, as bounded local commands with
+  recorded evidence. It leaves out the role agents, broad hooks, and memory that
+  only grows.
 
 LeanLoop is an independent implementation: no code, prompts, or skill text were
-copied from either project, and their licenses cover their own work. See
-[SOURCES.md](SOURCES.md) for every reference and what was not adopted.
+copied from either project. Version 0.5.0 also reflects a review of 52 arXiv
+papers on coding agents, listed with their effect on the design in
+[SOURCES.md](SOURCES.md).
 
-## Start in an existing project
+## Install
 
-Requirements: Node 22+, Git, and a Git worktree root. Verification uses POSIX
-process groups and supports Linux/macOS; this release does not support Windows
-verification. Windows and macOS have not been exercised by the Linux test run.
+Requirements: Claude Code, Node 22+ on `PATH`, and Git. Linux, macOS, and
+Windows are supported.
 
-Get the source once:
+In Claude Code:
 
-```sh
-git clone https://github.com/seyedalicheraghi/LeanLoop-.git "$HOME/src/leanloop"
+```text
+/plugin marketplace add seyedalicheraghi/LeanLoop-
+/plugin install leanloop@leanloop
 ```
 
-From the **project you want to work on**, preview and apply the installation:
+Or from a shell:
 
 ```sh
-node "$HOME/src/leanloop/bin/leanloop.mjs" init --project "$PWD" --dry-run
-node "$HOME/src/leanloop/bin/leanloop.mjs" init --project "$PWD"
+claude plugin marketplace add seyedalicheraghi/LeanLoop-
+claude plugin install leanloop@leanloop
 ```
 
-Pick where the skill goes with `--host` (repeatable):
+The default scope is your user account, so every project can use it. A private
+repository needs Git credentials that can read it. To try a local checkout
+without installing, start Claude Code with `claude --plugin-dir /path/to/LeanLoop`.
 
-| Host | Skill folder | Reviewer | Read by |
-|---|---|---|---|
-| `portable` (default) | `.agents/skills/leanloop/` | `.github/agents/leanloop-reviewer.agent.md` | Copilot (VS Code, CLI, cloud), Codex, Gemini CLI |
-| `copilot` | `.github/skills/leanloop/` | `.github/agents/leanloop-reviewer.agent.md` | Copilot only (the 0.1.0 layout) |
-| `claude` | `.claude/skills/leanloop/` | `.claude/agents/leanloop-reviewer.md` | Claude Code (and VS Code) |
+The plugin adds a short description of each skill and the reviewer to Claude's
+context in every session. The skill bodies load only when used.
 
-Use one of `portable` or `copilot`, not both; add `claude` if you use Claude Code.
-The installer also adds a project-owned `leanloop.json` check configuration
-and an ignored `.leanloop/` state directory.
+## Use it in a project
 
-It does not overwrite customizations, change existing instructions, select
-models, register plugins, create commits, install dependencies, or start checks.
-An identical reinstall is a no-op. A conflicting file is an error, not permission
-to replace it. The copied runtime continues to work without this source package.
-An installation registry records shipped-file digests and hosts. For a later
-release, preview `init --upgrade --dry-run`, then use `init --upgrade`; the hosts
-you installed are kept. Only registered, unmodified files can be replaced or
-retired; local edits remain conflicts. To move a 0.1.0 install to the portable
-location, run `init --upgrade --host portable`.
+1. **Set up once:** run `/leanloop:setup` in the project. It creates
+   `leanloop.json` and an ignored `.leanloop/` folder, suggests checks from the
+   project's own scripts, and records only the ones you approve.
+2. **Work:** ask for a change as usual, or start with `/leanloop:work fix the
+   pagination bug`. Claude follows the loop below for larger changes and keeps
+   small ones small.
+3. **Audit:** `/leanloop:audit` inventories the project's Claude Code setup for
+   overhead and risky configuration. It is read-only and needs no setup.
 
-### Configure the checks you actually need
+Claude Code asks before running the CLI, like any command. Approve it in the
+prompt, or add an allow rule for the command it shows.
 
-The initial configuration intentionally has **no checks**. `doctor` suggests
-commands it detects (npm/pnpm/yarn/bun scripts, pytest, cargo, go, make, Bazel) but
-never records them. It honors `packageManager`, then unambiguous lockfiles, and
-reports malformed files instead of silently guessing. Review a suggestion,
-including any target placeholder, then record only what matters:
+## The loop
 
-```sh
-node .agents/skills/leanloop/scripts/workflow.mjs doctor
-node .agents/skills/leanloop/scripts/workflow.mjs add-check test --timeout 120 -- npm test
+Claude runs the CLI as `node "${CLAUDE_PLUGIN_ROOT}/leanloop.mjs" COMMAND`. You
+can run the same commands yourself from a checkout (`node leanloop.mjs COMMAND`).
+
+```text
+status / lessons        resume: task state, next action, project lessons
+start GOAL --accept CRITERION... --scope PATH... [--risk high]
+context "terms"         fallback: rank file names (12 paths, no contents)
+check [--only NAME]     run configured checks; failures include an output excerpt
+prove N "evidence"      record evidence for criterion N
+escalate KIND SUMMARY --tried TEXT --recommend TEXT
+                        stop and hand a decision to you (e.g. test-conflict)
+review --by ID --decision approve|request-changes --evidence TEXT
+finish                  succeeds only when every gate below holds
+checkpoint SUMMARY --next ACTION
+learn LESSON --evidence TEXT [--anchor PATH] / forget ID
 ```
 
-Do not add every possible check to every project. In a large Bazel or monorepo
-project, point a check at the affected targets, never `//...` by default. Review
-each command before running it: checks execute with your account's permissions
-and inherited environment.
+`prove` and `review` record attestations. The CLI cannot authenticate who wrote
+them or whether they are true.
 
-Commands are argument arrays, not shell strings. To use a shell intentionally,
-configure that shell explicitly and review its arguments. Never put credentials
-in the committed configuration.
+## What "done" requires
 
-An optional literal `--expect-output "specific success marker"` prevents a
-zero-exit command without that marker from passing. This is not a universal
-test-discovery parser; inspect test counts and test behavior yourself.
+`finish` refuses unless all of these hold for the current source fingerprint
+(commit, staged changes, worktree changes, untracked files, and `leanloop.json`):
 
-To change or remove a configured check, edit `leanloop.json` explicitly.
-Unknown fields, duplicate names, invalid paths, and invalid timeouts are errors.
-
-### Activate
-
-- **VS Code (Copilot):** open **Chat: Open Customizations → Skills** and confirm
-  `leanloop` is listed. The skill is eligible for automatic selection on
-  code tasks; discovery does not guarantee invocation. Use `/leanloop` to
-  request it explicitly and verify activation in the host.
-- **Codex and Gemini CLI:** they discover `.agents/skills/` at session start.
-  Gemini asks for consent before it activates a skill.
-- **Claude Code:** install with `--host claude`, then use `/leanloop`.
-
-To make the skill explicit-only, add `disable-model-invocation: true` to its
-frontmatter (VS Code and Claude Code honor it). Use `leanloop-reviewer` only for a
-justified independent review: it has read/search tools only and cannot run tests
-or edit files.
-
-**Existing policies still apply.** If a project mandates another orchestrator or
-a long role chain, resolve that conflict deliberately before adoption. Run
-`audit` first and see [migration](docs/migration.md). Adding this kit underneath
-conflicting rules does not remove their overhead.
-
-## Find what makes a setup slow: `audit`
-
-`audit` is read-only and works in any project, with or without this kit:
-
-```sh
-node "$HOME/src/leanloop/bin/leanloop.mjs" audit --project /path/to/project
-```
-
-It inventories project-local files and suggests what to investigate. It does not
-observe model requests, cached tokens, actual hook executions, or user-level
-configuration. Host-specific files are reported together, not assumed to load
-into every agent:
-
-| Finding | What it measures |
+| Gate | Why |
 |---|---|
-| `ALWAYS_ON_LARGE` | Bytes of potential root instructions across hosts |
-| `ROLE_CHAIN` / `MANY_AGENTS` | Declared agents and possible handoff paths within each host directory |
-| `ROUTER_AGENT` | Agents declaring delegation tools; not necessarily routing-only agents |
-| `PINNED_MODELS` | Explicit model declarations, not measured costs |
-| `PER_TOOL_HOOKS` | Command hooks configured with broad tool-event matchers |
-| `MEMORY_UNBOUNDED` | Size of memory-like files, not proof they are loaded |
-| `LARGE_REFERENCED_FILES` | Large documents mentioned in instructions, not proof of full reads |
-| `MANY_MCP_SERVERS` | Configured servers; actual tool discovery may be deferred |
+| Every configured check passed on this exact source | Any later edit makes old results stale |
+| Every acceptance criterion has evidence recorded on this source | A green build is not the requested behavior |
+| High-risk tasks have an approving independent review | Fresh-context review of risky changes |
+| **Edited or deleted test files, or changed checks, have an approving review** | Agents under pressure edit tests to pass; additions are fine |
 
-Exit status is 1 for high-severity findings **or incomplete inspection**.
-`complete`, `skippedCount`, `skipped`, and inventory/graph truncation fields make
-missing evidence explicit. Serialized output is capped at **16 KiB**, including
-the newline; `output.truncated` means detail lists were shortened, not that the
-remaining entries constitute the whole inventory. Counts remain available.
-Thresholds and bytes/4 token estimates are heuristics, not provider limits or
-billed usage. Keep safety hooks: measure and optimize redundant bookkeeping
-without removing authorization or destructive-action protections.
+The integrity gate compares tracked files against the commit recorded at
+`start`. Test files match common patterns (`test/`, `tests/`, `__tests__/`,
+`spec/`, `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`, `*Test.java`,
+`*Tests.cs`); set `testPaths` in `leanloop.json` to your own globs. It cannot see
+special-casing in source code or hard-coded results, which the reviewer is told
+to look for.
 
-## The working loop
+Other limits:
 
-For substantial code changes, the owner uses these operations while doing the
-actual edits and tests with the host's ordinary tools:
-
-```sh
-W=".agents/skills/leanloop/scripts/workflow.mjs"
-node $W status                      # resume: task state and next action
-node $W lessons                     # project lessons, at most 30
-
-# Establish an observable outcome, not a list of job titles.
-node $W start "Reject invalid pagination limits" \
-  --accept "Negative limits return the documented validation error" \
-  --accept "Valid pagination remains unchanged" --scope src --scope tests
-
-# Prefer editor symbols/references. This fallback returns paths, not source text.
-node $W context "pagination limit"
-
-# After implementing the change and regression tests:
-node $W check --only test           # an example name configured above
-# Run check for any remaining required checks on the final source.
-# Do not repeat an identical batch when allChecksPassed is already true.
-node $W prove 1 "Regression test negative-limit passed; its pre-fix failure was observed."
-node $W prove 2 "Existing valid-pagination tests passed with unchanged response assertions."
-node $W finish
-node $W learn "Pagination tests live in tests/api/pagination.test.mjs." --evidence "found via context"
-```
-
-These evidence strings are examples, **not results to paste without verification**.
-`prove` and `review` record operator attestations; the CLI cannot authenticate
-the author, inspect a remote agent, or determine whether a statement is true.
-
-Use `status` to resume, and `checkpoint SUMMARY --next ACTION` at meaningful
-boundaries. The state survives a new chat, process, or compaction. It is not
-automatic conversation memory: the owner must write an accurate checkpoint.
-
-For high-risk changes, pass `--risk high` when starting. Before finishing:
-
-```sh
-node $W review --by independent-reviewer --decision approve \
-  --evidence "Final change and acceptance tests reviewed; no unresolved findings."
-```
-
-A review requesting changes blocks completion even for a normal-risk task.
-Any Git-visible source change, including a staging-only change, makes previous
-checks, acceptance evidence, and review stale. Rerun checks for the final source
-and obtain updated evidence rather than
-relabeling old results. Editing `leanloop.lessons.md` does not.
+- 3 check batches per task by default. When they run out, Claude escalates
+  instead of retrying; `extend` needs a stated reason.
+- `status` reports `observedFailToPass`: checks that failed earlier in the task
+  and pass now, which is the red-then-green evidence for a bug fix.
+- Checkpoints store the last check result next to Claude's summary, because a
+  summary is a claim.
 
 ## Project lessons, bounded
 
-`learn` keeps durable facts (commands, traps, layout) in `leanloop.lessons.md`,
-a readable file you can commit. Each lesson is one line with evidence and a date.
-The file holds at most **30 lessons and 8 KiB**, on reads as well as writes;
-manual edits cannot bypass these budgets. When it is full, `learn` refuses
-until you `forget ID` or `learn ... --replace ID`. Hand-written text in the file is
-never dropped: a line that is not an entry is an error, not a silent deletion.
-This replaces append-only learnings files that every agent must read in full.
+`learn` keeps durable facts in `leanloop.lessons.md`, a file you can commit: at
+most **30 one-line lessons and 8 KiB**, each with evidence and a date, enforced
+on reads too. Near-duplicates are refused. A lesson anchored to a path is
+flagged stale when that path disappears. When the file is full, replace or
+forget a lesson. Research found memory systems often break tasks an agent would
+otherwise solve, so lessons are treated as hints to re-check, not facts.
+
+## Audit
+
+`/leanloop:audit` (or `node leanloop.mjs audit`) inventories what Claude Code
+loads for the project: CLAUDE.md files (including those in parent folders and
+`@imports`), rules, agents, skills, commands, hooks, permissions, and MCP
+servers. It flags large always-on text, broad or network-fetching hooks, broad
+permissions, unpinned or inline-secret MCP servers, and invisible Unicode. It
+never follows symlinks, reads at most 1 MiB per file and 8 MiB in total, and caps
+its output at 16 KiB. It exits 1 for high-severity findings or an incomplete
+inspection. Findings are structural indicators, not measured tokens or proof of
+malicious content.
 
 ## What is bounded
 
 | Resource | Behavior |
 |---|---|
-| Default architecture | One delivery owner; review or helpers only when justified |
-| Customization text | One skill and one reviewer, combined at most 8 KiB |
-| Audit | 1 MiB per customization, 8 MiB total text; serialized output at most 16 KiB |
-| Project lessons | At most 30 entries and 8 KiB |
-| Context fallback | 12 filenames by default; at most 30; actual JSON output at most 8 KiB |
-| Repository size | Index listing up to 256 MiB (about 2 million tracked paths); filename inventory up to 1,000,000 paths |
-| Uncommitted diff | Up to 64 MiB; untracked file contents up to 16 MiB and 100,000 files |
+| Skills and reviewer | Work skill plus reviewer at most 8 KiB; all skills plus reviewer at most 12 KiB |
 | Check attempts | 3 per task by default; an extension needs a recorded reason |
 | Check duration | 120 seconds by default per command; configurable up to 3,600 |
-| Logs | 64 KiB per stream, retaining head and tail; assertions examine the full stream |
-| Continuation state | At most 10 checkpoints and 10 acceptance criteria |
+| Logs | 64 KiB per stream (head and tail); failed checks return a 1.5 KiB excerpt |
+| Continuation state | At most 10 checkpoints, 10 acceptance criteria, 100 check-history entries |
+| Project lessons | At most 30 entries and 8 KiB |
+| Context fallback | 12 file names by default, at most 30; output at most 8 KiB |
+| Repository size | Index listing up to 256 MiB; uncommitted diff up to 64 MiB; untracked content up to 16 MiB |
 
-The host owns model calls, tool calls, tokens, and billing. The skill's delegation
-guidance is **advisory**, not an enforced provider budget. Check-attempt limits are
-enforced only for checks run through this CLI.
+## Windows
 
-The filename fallback is deliberately not a semantic repository map. It does
-not replace LSP, dependency analysis, search, or reading relevant consumers.
+Checks run natively. LeanLoop stops a check's whole process tree with
+`taskkill /T` and then removes descendants that outlived it, limited to
+processes created after the check started. `npm`, `npx`, and other `.cmd` or
+`.bat` tools run through `cmd.exe`; their arguments cannot contain `"`, `%`, `!`,
+or line breaks, so call the underlying executable (for example `node`) if you
+need them. Each check costs about half a second extra for the process sweep.
 
 ## Failure behavior
 
 - Missing, failed, interrupted, or timed-out checks cannot complete a task.
-- Unknown check names and an empty check configuration are errors.
 - Checks that change Git-visible source invalidate their own evidence.
-- All configured checks must pass for the final source; a targeted check alone
-  cannot substitute for missing required checks.
-- Targeted results report `selectionPassed`, `allChecksPassed`, `knownFailing`,
-  and `pendingChecks`. A carried-over failure keeps the task blocked.
-- An active task cannot be overwritten. Finish or cancel it with a reason.
-- Concurrent CLI mutations are rejected by a project lock.
-- After an abnormal crash, inspect `status`. `recover --owner-pid PID` refuses
-  a live or mismatched owner. With a missing lock, `recover --unlocked --reason TEXT`
-  can reset stranded state. An invalid lock requires operator-confirmed
-  `recover --broken-lock --reason TEXT`, which quarantines it. Neither mode can
-  displace a recorded live task owner. Inspect orphaned check processes yourself.
-- If freshness cannot be computed, `status` still returns the checkpoint and
-  explicit diagnostics, with unknown freshness and a nonzero exit status.
-- No automatic stash, commit, reset, dependency install, or remote operation occurs.
+- An active task cannot be overwritten; finish, cancel, or escalate it.
+- Concurrent CLI mutations are rejected by a project lock. After a crash,
+  `status` shows the state and `recover` offers explicit modes that never steal
+  a live owner's lock or kill unrelated processes.
+- No automatic stash, commit, reset, dependency install, or remote operation.
 
-See [the full contract and limitations](docs/design.md).
+## Security
 
-## Test, measure, distribute
+LeanLoop does not prevent prompt injection. The work skill tells Claude to treat
+repository files, issues, web pages, tool output, and check output as data, to
+stop and quote embedded instructions, and to leave CLAUDE.md, settings, hooks,
+and MCP config alone unless asked. Research shows instructions like these lower
+but do not remove the risk. Checks run project code with your permissions. Use a
+container or OS sandbox and network limits for untrusted repositories, and
+review changes to configuration, hooks, and dependencies yourself.
 
-From this package:
+## Develop and test
 
 ```sh
 npm test                    # regression tests on synthetic temporary Git projects
-npm run validate            # syntax, links, manifests, frontmatter, size budget
+npm run validate            # manifests, frontmatter, budgets, links, hidden Unicode,
+                            # and `claude plugin validate --strict` when claude is installed
 npm run benchmark           # filename ranking over 100,000 synthetic paths
 npm run benchmark:repo      # opt-in: full CLI loop in a 150,000-file Git repo
-npm pack --ignore-scripts --pack-destination /path/to/output
 ```
 
-There are no dependencies to install. The tests use synthetic temporary Git
-projects, not an existing codebase or real model API.
+There are no dependencies. Use the [evaluation procedure](docs/evaluation.md) to
+compare LeanLoop with your current workflow on your own tasks. Nothing here
+claims it is faster, cheaper, or more accurate until you measure that.
 
-Before publishing, you can prove that private words (an employer, internal
-projects, hostnames) are absent without writing them into the package: keep them
-one per line in a file **outside** this folder and run
+Before publishing, keep private words (an employer, internal projects,
+hostnames) one per line in a file outside this folder and run
 `LEANLOOP_DENYLIST_FILE=/path/outside/terms.txt npm run validate`.
-
-The package is marked private to prevent accidental registry publishing, but it
-can be packed and installed from its local archive:
-
-```sh
-npm install --global --ignore-scripts /path/to/leanloop-kit-0.4.0.tgz
-leanloop init --project /path/to/project --dry-run
-```
-
-Alternatively, keep the extracted folder and invoke its CLI with Node. A legacy
-Copilot [plugin manifest](plugin.json) is included for manual plugin loading.
-Native plugin loading supplies the skill/reviewer; it does **not** initialize
-project configuration. Run `init` separately if you want the local task runtime.
-
-Use [controlled evaluation](docs/evaluation.md) to measure actual success,
-wall-clock time, tokens, and cost against your existing workflow. The synthetic
-benchmarks measure CLI bookkeeping only; they are not evidence of coding quality
-or API savings.
 
 ## Read next
 
 - [Design, guarantees, and limits](docs/design.md)
-- [Adopting it without breaking existing policy](docs/migration.md)
-- [Evaluation and cross-provider review](docs/evaluation.md)
-- [Recorded validation and remaining limits](docs/validation.md)
+- [Migration from earlier versions](docs/migration.md)
+- [Evaluation procedure](docs/evaluation.md)
+- [Validation record](docs/validation.md)
 - [Research and source provenance](SOURCES.md)
 - [MIT license](LICENSE)

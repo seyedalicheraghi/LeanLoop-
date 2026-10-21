@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { rankPaths, CONTEXT_BYTES } from '../skills/leanloop/scripts/lib/context.mjs';
+import { rankPaths, CONTEXT_BYTES } from '../lib/context.mjs';
 
 const paths = Array.from({ length: 100000 }, (_, index) => `packages/module-${index}/src/handler-${index}.ts`);
 const start = performance.now();

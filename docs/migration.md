@@ -11,7 +11,7 @@ replace an existing workflow on the first run.
    and model overrides in the host's customization UI.
 3. Deliberately remove or narrow obsolete mandatory routing rules in the pilot.
    Keep project conventions, safety controls, and required validation.
-4. Install this kit with `init --dry-run`, inspect the planned files, then `init`.
+4. Install the plugin, run `/leanloop:setup`, and inspect what `init --dry-run` plans.
 5. Configure real checks and verify discovery in a new session.
 
 The installer intentionally does not perform step 3 for you. It cannot know which
@@ -39,7 +39,7 @@ actions merely to save time. The host still controls tool permissions.
 ## Converting a role-per-agent suite, step by step
 
 1. **Measure.** Run `audit` on the suite and keep the JSON. Note always-on bytes,
-   agent count, longest handoff chain, per-tool hook commands, and memory bytes.
+   agent count, router agents, per-tool hook commands, and memory bytes.
 2. **Keep the knowledge, drop the roles.** For each specialist agent, move durable
    domain knowledge (how the pipeline works, where data lives, known defects) into
    one on-demand skill or a short project guide. Remove unnecessary handoff
@@ -65,48 +65,62 @@ Domain rules that encode real hazards (for example "never write to a shared data
 mount" or "never launch expensive jobs without a budget check") stay. Enforce them
 with a narrow hook or check, not with a role chain.
 
-Audit byte counts and handoff paths are not token bills or timings. Verify actual
+Audit byte counts and agent inventories are not token bills or timings. Verify actual
 host loading and traces before claiming a speedup. Do not compare unpaired session
 averages as if the tasks, models, and accepted outcomes were controlled.
 
-## VS Code and other hosts
+## Claude Code specifics
 
-In VS Code's Copilot harness, skills in `.github/skills/`, `.agents/skills/`, and
-`.claude/skills/` are discovered, and custom agents in `.github/agents/`. Codex
-and Gemini CLI discover `.agents/skills/`; Claude Code discovers `.claude/skills/`
-and `.claude/agents/`. That is why `portable` is the default host. Reusable
-workflows are skills; ordinary `.prompt.md` files are a different feature, not
-the primary adapter used here.
+LeanLoop 0.5.0 targets Claude Code only. Install it once as a plugin; every
+project then sees `/leanloop:work`, `/leanloop:setup`, `/leanloop:audit`, and the
+`leanloop-reviewer` agent. A project needs only `leanloop.json` and the ignored
+`.leanloop/` folder, which `/leanloop:setup` creates.
 
-The copied skill contains its own Node runtime and relative references. Do not
-assume identical tool aliases, agent discovery, or slash commands across clients.
-The reviewer definition uses documented Copilot aliases; the `claude` host gets a
-converted copy with Claude Code tool names.
+Claude Code also loads CLAUDE.md files from parent folders and your user folder,
+everything they `@import`, and `.claude/rules` files without `paths`. Run
+`/leanloop:audit` to see them. If a new session still launches a mandatory role
+chain, inspect those sources before adding another rule. Plugins cannot ship
+permission rules, so Claude Code asks before running the CLI until you allow it.
 
-Keep existing user-level rules in mind: project file installation does not disable
-them. If the new session still launches a mandatory chain, inspect the active
-instruction sources before adding another rule.
+For a team, commit the marketplace and plugin to the shared project settings so
+members are prompted to install it:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "leanloop": { "source": { "source": "github", "repo": "seyedalicheraghi/LeanLoop-" } }
+  },
+  "enabledPlugins": { "leanloop@leanloop": true }
+}
+```
 
 ## Rollback and maintenance
 
 1. Stop the current task or record a cancellation; do not leave checks running.
-2. Restore the pilot's prior customization files from your own version control
-   or backups, preserving unrelated work.
-3. Remove only kit-managed paths after comparing their current contents.
-4. Keep or securely dispose of ignored state/logs according to your requirements.
+2. Disable or uninstall the plugin with `/plugin` (or `claude plugin disable
+   leanloop@leanloop`). Project files are untouched.
+3. Delete `leanloop.json`, `leanloop.lessons.md`, and `.leanloop/` only if you
+   no longer want the configuration, lessons, or task history.
 
-There is intentionally no broad uninstall command or force-overwrite option.
-Generated state is separate from the project configuration and skill files.
-For a new release, run the distributable CLI's `init --upgrade --dry-run` first.
-The registry permits replacement/removal only of unmodified previously managed
-files. `init --upgrade` applies that plan without changing check configuration.
-Locally edited assets require explicit reconciliation; never discard them just
-to make an upgrade succeed. Review the installed runtime when updating: it is a
-copied version, not a hidden auto-updating symlink.
+There is intentionally no uninstall command that deletes project files. Plugin
+updates arrive when the plugin version changes; run `/plugin` to update. Task
+evidence recorded by an older runtime may be stale or ungated after an update:
+rerun checks and record fresh proof and review rather than editing stored state.
 
-Version 0.3.0 fingerprints staged and worktree diffs separately. Existing task
-evidence from older runtimes will be stale after upgrading; rerun checks and
-record fresh proof/review rather than editing the stored hashes.
+## Moving from 0.4.0 (per-project copies) to the plugin
+
+LeanLoop 0.4.0 copied the skill and reviewer into each project
+(`.claude/skills/leanloop/`, `.agents/skills/leanloop/`, `.github/skills/leanloop/`,
+`leanloop-reviewer` agent files) and kept a registry in `.leanloop/install.json`.
+With the plugin installed those copies duplicate it.
+
+1. Finish or cancel any active task with the old runtime.
+2. Install the plugin and run `/leanloop:setup` (or `init`). It keeps your
+   `leanloop.json` and lists the old copies it found as `vendoredCopies`.
+3. Compare each listed copy with the 0.4.0 release, then delete it yourself,
+   along with `.leanloop/install.json`. LeanLoop never deletes them for you.
+4. Tasks started under 0.4.0 have no integrity base; start new tasks to get the
+   test-integrity gate.
 
 ## Moving from lean-workflow
 
@@ -132,4 +146,5 @@ local edits and task state that only you can judge.
 4. Compare the old skill and reviewer files with the 0.3.0 release, then remove
    them yourself. Move any `.lean-workflow/` state you want to keep out of the
    project; `init` refuses while `.lean-workflow/install.json` exists.
-5. Run `init --dry-run`, then `init`, with the hosts you used before.
+5. Install the 0.5.0 plugin and run `/leanloop:setup`; the 0.4.0 names in the
+   table above are the per-project copies the plugin replaces.

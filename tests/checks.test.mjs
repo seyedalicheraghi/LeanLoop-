@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import test from 'node:test';
-import { runCheck, MAX_LOG_BYTES } from '../skills/leanloop/scripts/lib/checks.mjs';
-import { startTask, verify } from '../skills/leanloop/scripts/lib/tasks.mjs';
-import { fixture, temporary, cli } from './helpers.mjs';
+import { runCheck, windowsCommand, MAX_LOG_BYTES } from '../lib/checks.mjs';
+import { startTask, verify } from '../lib/tasks.mjs';
+import { fixture, temporary, cli, link } from './helpers.mjs';
 
 test('timeouts terminate the owned process group, including ordinary grandchildren', async t => {
   const root = await fixture(t);
@@ -55,7 +55,7 @@ test('argument arrays do not invoke shell expansion', async t => {
 test('a check cwd cannot escape through a symlink', async t => {
   const root = await fixture(t);
   const outside = temporary(t);
-  fs.symlinkSync(outside, path.join(root, 'linked'), 'dir');
+  link(t, outside, path.join(root, 'linked'), 'dir');
   await assert.rejects(runCheck(root, {
     name: 'escape', command: [process.execPath, '-e', 'process.exit(0)'], cwd: 'linked',
   }, 'symlink-test'), /symlink/);
@@ -130,4 +130,29 @@ test('checks clear Git routing variables consistently with the fingerprint and r
     if (previous === undefined) delete process.env.GIT_DIR;
     else process.env.GIT_DIR = previous;
   }
+});
+
+test('a grandchild that outlives a normally exiting check is stopped', async t => {
+  const root = await fixture(t);
+  const childCode = "setTimeout(() => require('fs').writeFileSync('orphan-marker', 'unexpected'), 1500)";
+  const parentCode = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], {stdio:'ignore'}); setTimeout(() => process.exit(0), 300);`;
+  const result = await runCheck(root, { name: 'orphan', command: [process.execPath, '-e', parentCode] }, 'orphan-test');
+  assert.equal(result.ok, true, JSON.stringify(result));
+  await wait(1700);
+  assert.equal(fs.existsSync(path.join(root, 'orphan-marker')), false);
+});
+
+test('Windows .cmd shims run through cmd.exe with literal arguments', { skip: process.platform !== 'win32' && 'Windows only' }, async t => {
+  const root = await fixture(t);
+  const bin = temporary(t);
+  const shim = path.join(bin, 'echoargs.cmd');
+  fs.writeFileSync(shim, `@"${process.execPath}" -e "console.log(JSON.stringify(process.argv.slice(1)))" %*\r\n`);
+  const result = await runCheck(root, { name: 'shim', command: [shim, 'two words', 'a&b', '(x)'] }, 'shim-test');
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, result.stdoutLog), 'utf8')), ['two words', 'a&b', '(x)']);
+  await assert.rejects(runCheck(root, { name: 'unsafe', command: [shim, '%PATH%'] }, 'unsafe-test'), /cannot pass/);
+  const resolved = windowsCommand(['echoargs', 'x'], { Path: bin, PATHEXT: '.EXE;.CMD' });
+  assert.equal(resolved.verbatim, true);
+  assert.match(resolved.args.at(-1), /echoargs\.cmd" "x"/i);
+  assert.deepEqual(windowsCommand(['tool.exe', 'x'], { Path: bin }), { file: 'tool.exe', args: ['x'], verbatim: false });
 });

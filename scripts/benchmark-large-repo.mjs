@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { install } from '../lib/install.mjs';
-import { execute } from '../skills/leanloop/scripts/lib/cli.mjs';
+import { init } from '../lib/init.mjs';
+import { execute } from '../lib/cli.mjs';
 
 const count = Number(process.argv[2] ?? 150000);
 if (!Number.isSafeInteger(count) || count < 1 || count > 2000000) throw new Error('FILES must be an integer from 1 to 2000000.');
@@ -36,7 +36,7 @@ try {
     git(['add', '-A']);
     git(['commit', '-q', '-m', 'synthetic scale fixture\n\nCo-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>']);
   });
-  await install(root);
+  await init(root);
   await run(['add-check', 'smoke', '--', process.execPath, '-e', 'console.log("smoke ok")']);
   await time('startMs', () => run(['start', 'Scale check', '--accept', 'The smoke check passes']));
   const statusResult = await time('statusMs', () => run(['status']));

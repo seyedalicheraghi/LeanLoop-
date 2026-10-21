@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { context, rankPaths, CONTEXT_BYTES } from '../skills/leanloop/scripts/lib/context.mjs';
+import { context, rankPaths, CONTEXT_BYTES } from '../lib/context.mjs';
 import { fixture, cli } from './helpers.mjs';
 
 test('100,000 candidate paths remain within the actual serialized output budget', () => {

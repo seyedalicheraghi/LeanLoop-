@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { fingerprint } from '../skills/leanloop/scripts/lib/git.mjs';
-import { validateConfig } from '../skills/leanloop/scripts/lib/schema.mjs';
-import { fixture, temporary, commit, git, cli } from './helpers.mjs';
+import { fingerprint } from '../lib/git.mjs';
+import { validateConfig } from '../lib/schema.mjs';
+import { fixture, temporary, commit, git, cli, link } from './helpers.mjs';
 
 test('configuration rejects escaping paths, shell strings, bad timeouts, and duplicate checks', () => {
   const valid = { name: 'test', command: ['node', '--test'] };
@@ -38,7 +38,7 @@ test('symlinked state is not followed or overwritten', async t => {
   const outside = temporary(t);
   const sentinel = path.join(outside, 'sentinel.json');
   fs.writeFileSync(sentinel, '{"untouched":true}');
-  fs.symlinkSync(sentinel, path.join(root, '.leanloop/task.json'));
+  if (!link(t, sentinel, path.join(root, '.leanloop/task.json'))) return;
   const result = cli(root, ['status']);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /symlink/);

@@ -1,0 +1,18 @@
+{
+  "name": "leanloop",
+  "owner": {
+    "name": "Ali Cheraghi"
+  },
+  "metadata": {
+    "description": "LeanLoop: an evidence-gated, single-owner workflow for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "leanloop",
+      "source": "./",
+      "description": "One owner, small context, evidence before done: Claude Code finishes only on fresh checks, edited tests need review, and setup overhead is audited.",
+      "license": "MIT",
+      "keywords": ["workflow", "verification", "testing"]
+    }
+  ]
+}

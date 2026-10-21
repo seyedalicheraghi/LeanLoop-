@@ -1,0 +1,12 @@
+{
+  "name": "leanloop",
+  "version": "0.5.0",
+  "description": "One owner, small context, evidence before done: Claude Code finishes only on fresh checks, edited tests need review, and setup overhead is audited.",
+  "author": {
+    "name": "Ali Cheraghi"
+  },
+  "homepage": "https://github.com/seyedalicheraghi/LeanLoop-",
+  "repository": "https://github.com/seyedalicheraghi/LeanLoop-",
+  "license": "MIT",
+  "keywords": ["workflow", "verification", "testing", "single-agent", "evidence"]
+}

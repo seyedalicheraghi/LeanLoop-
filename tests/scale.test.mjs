@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkIndexListing } from '../skills/leanloop/scripts/lib/git.mjs';
+import { checkIndexListing } from '../lib/git.mjs';
 
 const sha = 'a'.repeat(40);
 const entry = (file, { flag = 'H', mode = '100644', stage = '0' } = {}) => `${flag} ${mode} ${sha} ${stage}\t${file}\0`;
