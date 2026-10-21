@@ -136,8 +136,8 @@ Other limits:
 most **30 one-line lessons and 8 KiB**, each with evidence and a date, enforced
 on reads too. Near-duplicates are refused. A lesson anchored to a path is
 flagged stale when that path disappears. When the file is full, replace or
-forget a lesson. Research found memory systems often break tasks an agent would
-otherwise solve, so lessons are treated as hints to re-check, not facts.
+forget a lesson. In one benchmark, every memory system tested broke some tasks an
+agent solved without memory, so lessons are hints to re-check, not facts.
 
 ## Audit
 
@@ -188,10 +188,11 @@ need them. Each check costs about half a second extra for the process sweep.
 LeanLoop does not prevent prompt injection. The work skill tells Claude to treat
 repository files, issues, web pages, tool output, and check output as data, to
 stop and quote embedded instructions, and to leave CLAUDE.md, settings, hooks,
-and MCP config alone unless asked. Research shows instructions like these lower
-but do not remove the risk. Checks run project code with your permissions. Use a
-container or OS sandbox and network limits for untrusted repositories, and
-review changes to configuration, hooks, and dependencies yourself.
+and MCP config alone unless asked. In one study, security rules alone did not
+lower attack success, so treat these instructions as a thin layer. Checks run
+project code with your permissions. Use a container or OS sandbox and network
+limits for untrusted repositories, and review changes to configuration, hooks,
+and dependencies yourself.
 
 ## Develop and test
 

@@ -17,12 +17,12 @@ Differences are reported as B − A, per task first and then averaged.
 ## Why small A/B tests mislead
 
 - **Single runs are noisy.** Rerunning the same agent on SWE-bench Verified
-  moved single-run pass@1 by 2.2–6.0 points, with a standard deviation above
-  1.5 points even at temperature 0 ([2602.07150](https://arxiv.org/abs/2602.07150)).
+  moved single-run pass@1 by 2.2–6.0 points, with standard deviations up to
+  1.8 points even at temperature 0 ([2602.07150](https://arxiv.org/abs/2602.07150)).
   One run per task cannot separate a few-point effect from luck. Run several
   trials, plan the sample size, and report pass@k and pass^k next to pass@1.
 - **Trials of one task are not independent.** Cluster standard errors by task
-  (they can be roughly three times the naive figure), and compare two systems
+  (in the paper's examples, 1.1 to 3 times the naive figure), and compare two systems
   through paired per-task differences when both ran the same tasks
   ([2411.00640](https://arxiv.org/abs/2411.00640)).
 - **Reliability is not capability.** pass^k, success in all k trials, exposes
@@ -30,16 +30,17 @@ Differences are reported as B − A, per task first and then averaged.
 - **Cost and accuracy belong together,** and tasks used for tuning do not belong
   in the test set ([2407.01502](https://arxiv.org/abs/2407.01502)).
 - **Impressions are not measurements.** In a randomized trial, experienced
-  developers believed AI tools made them about 20% faster while their measured
-  completion time was 19% slower ([2507.09089](https://arxiv.org/abs/2507.09089)).
-- **Passing tests is not correctness.** Patches that pass the visible tests can
+  developers estimated afterwards that AI tools had made them about 20% faster,
+  while their measured completion time was 19% longer ([2507.09089](https://arxiv.org/abs/2507.09089)).
+- **Passing tests is not correctness.** Patches that pass the benchmark's tests can
   still be wrong ([2503.15223](https://arxiv.org/abs/2503.15223)), and agents
   sometimes edit or special-case tests to make them pass
   ([2510.20270](https://arxiv.org/abs/2510.20270)).
 - **Effects depend on the work.** Results vary strongly by task type and by
-  repository ([2602.08915](https://arxiv.org/abs/2602.08915),
-  [2606.28235](https://arxiv.org/abs/2606.28235)), and token use for the same
-  task can vary up to 30x between runs ([2604.22750](https://arxiv.org/abs/2604.22750)).
+  repository ([2602.08915](https://arxiv.org/abs/2602.08915) for task type,
+  [2606.28235](https://arxiv.org/abs/2606.28235) for repositories), and token use
+  for the same task typically varies about 2x between runs, by the authors' account
+  up to 30x ([2604.22750](https://arxiv.org/abs/2604.22750)).
 
 ## Controlled task set
 

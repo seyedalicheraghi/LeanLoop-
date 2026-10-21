@@ -42,11 +42,11 @@ cost, speed, or quality claim about any of them is made here.
 ### The output-style project's own evidence
 
 Its pinned [evaluation results](https://github.com/ayghri/i-have-adhd/blob/1ecea1993b7fce257ffbd686c070948b5e07eda6/evals/RESULTS.md)
-report a failed release gate despite improved aggregate style scores (weighted
-4.045 to 4.473 over 14 cases and 3 trials). The largest gains were in progress
-and error reports. They identify a task whose runner had no tools to perform the
-requested edit, and a regression where requiring "cause, then fix" encouraged an
-unsupported cause.
+report a failed release gate despite improved weighted rubric scores (4.045 to
+4.473 over 14 cases and 3 trials). The largest gains were in progress and error
+reports. They identify a task whose runner had no tools to perform the requested
+edit, and a regression the author suspects came from requiring "cause, then fix",
+which can push an unsupported cause; three trials could not confirm it.
 
 That is useful evidence against copying a style policy blindly. This kit
 separates observed facts from uncertainty, writes "cause unknown" when evidence
@@ -58,7 +58,7 @@ sample and same-family judge do not establish broad efficacy.
 
 - Anthropic, [How we built our multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system)
   (2025): multi-agent systems used about 15x the tokens of chats; token usage
-  explained most performance variance; most coding tasks have fewer truly
+  explained 80% of performance variance on BrowseComp; most coding tasks have fewer truly
   parallelizable parts than research and are not a good fit today.
   The 15x figure compares their research system with chat, not this kit with a
   single coding agent. It is not a transferable cost multiplier or savings estimate.
@@ -70,8 +70,8 @@ sample and same-family judge do not establish broad efficacy.
 - Anthropic, [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
   (2025): context is a finite attention budget; prefer just-in-time retrieval,
   compaction, and structured notes over preloading.
-- Chroma, [Context Rot](https://research.trychroma.com/context-rot) (2025): model
-  accuracy degrades as input length grows, well before context limits.
+- Chroma, [Context Rot](https://www.trychroma.com/research/context-rot) (2025): model
+  performance degrades as input length grows, even on simple tasks.
 
 ## Primary papers
 
@@ -103,8 +103,9 @@ sample and same-family judge do not establish broad efficacy.
 
 4. **SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering**
    (arXiv:2405.15793, 2024). [Paper](https://arxiv.org/abs/2405.15793).
-   Purpose-built, bounded navigation and search tools improved an agent more than
-   raw shell access; this motivates bounded CLI output.
+   A purpose-built interface (capped search, a windowed file viewer, linted edits)
+   beat raw shell access, and capped search beat unbounded iterative search; this
+   motivates bounded CLI output.
 
 5. **Lost in the Middle: How Language Models Use Long Contexts**
    (arXiv:2307.03172, 2023). [Paper](https://arxiv.org/abs/2307.03172).
@@ -113,17 +114,19 @@ sample and same-family judge do not establish broad efficacy.
 
 6. **Agentic Context Engineering** (arXiv:2510.04618, October 2025).
    [Paper](https://arxiv.org/abs/2510.04618).
-   Evolving playbooks with small incremental edits avoid both unbounded growth and
-   "context collapse" from wholesale rewriting; this motivates replace-one-entry
-   lessons rather than append-only logs or full rewrites.
+   Incremental edits avoid "context collapse" from wholesale rewriting, while
+   de-duplication and a pruning cap keep the playbook from growing without bound;
+   this motivates replace-one-entry lessons with a hard cap rather than append-only
+   logs or full rewrites.
 
 7. **Evaluating AGENTS.md: Are Repository-Level Context Files Helpful for Coding
    Agents?** (arXiv:2602.11988, February 2026).
    [Paper, v1](https://arxiv.org/html/2602.11988v1);
    [evaluation repository](https://github.com/eth-sri/agentbench).
    The study uses 138 Python tasks across 12 repositories, plus SWE-bench Lite.
-   In its setting, developer-written context files slightly helped on average,
-   generated files slightly hurt, and context files increased costs by over 20%.
+   In its setting, developer-written context files slightly helped on average and
+   raised costs by up to 19%; generated files slightly hurt and raised costs by over
+   20%. Neither accuracy effect was statistically significant.
    This motivates minimal, useful repository requirements and task-level evaluation,
    not automatically generating more instructions or banning all context files.
    It does not test this package's skill or establish a universal result.
@@ -142,37 +145,41 @@ to public research tools, and no upstream implementation was copied.
 
 On 2026-10-20, six parallel literature reviews covered arXiv work on coding-agent
 architecture, context, memory, verification, security, and practice and
-evaluation. Every ID below was checked against arXiv's own metadata. Most 2026
-entries are unreviewed preprints, often with one model, one harness, or a small
-task set; none of them evaluated LeanLoop. They justify design choices, not
-performance claims.
+evaluation. Every ID below was checked against arXiv's own metadata. A second
+pass the same day checked every quoted figure and statement in this file and in
+the docs against each source's full text (61 claims, including the earlier
+sections and non-arXiv posts): none was contradicted or unsupported, 19 needed
+corrected figures or wording, and about 18 more were narrowed to their exact
+scope. Most 2026 entries are unreviewed preprints, often with one model, one
+harness, or a small task set; none of them evaluated LeanLoop. They justify
+design choices, not performance claims.
 
 ### Architecture and delegation
 
 | Paper | Finding | Effect on LeanLoop |
 |---|---|---|
-| [2609.04898](https://arxiv.org/abs/2609.04898) RefactorPlatform | A lean single agent with retrieval scored 86% against 66% for a sub-agent setup on matched refactoring tasks | One owner stays the default |
-| [2609.32459](https://arxiv.org/abs/2609.32459) Harness effects | Task-specific sub-agents and a tool registry helped; general-purpose sub-agents and context compression hurt; returns diminish as models improve | Delegate only narrow read-only questions or review; audit flags agents with every tool |
+| [2609.04898](https://arxiv.org/abs/2609.04898) RefactorPlatform | A lean single agent with retrieval scored 86% against 66% for a sub-agent setup on 100 matched refactoring tasks (one model, one run) | One owner stays the default |
+| [2609.32459](https://arxiv.org/abs/2609.32459) Harness effects | Task-specific sub-agents and a tool registry helped; general sub-agents and context compression hurt; harness gains shrank with stronger models on issue repair, not on ProgramBench | Delegate only narrow read-only questions or review; audit flags agents with every tool |
 | [2610.17471](https://arxiv.org/abs/2610.17471) Teams of coding agents | Teams beat a solo agent at 3-7x the cost; delegating only planning matched full delegation at half the cost; cheap implementers lowered reward | No implementation hand-offs to other agents |
-| [2603.26458](https://arxiv.org/abs/2603.26458) Can AI models direct each other? | A review-only loop added 2 points; structured exploration plus planning added 11 | Scope and acceptance criteria before editing |
-| [2606.05670](https://arxiv.org/abs/2606.05670) Do more agents help? | 1 of 6 multi-agent workflows beat a single agent, at up to 4.34x the tokens | Same |
-| [2606.13733](https://arxiv.org/abs/2606.13733) Task structure limits multi-agent success | Success falls with how tightly a task's parts are coupled | Parallel writers only for genuinely separable work |
-| [2608.16801](https://arxiv.org/abs/2608.16801) When agents coordinate | A coordinator gave no reliable gain; agents searched for hidden grading material in about 4 of 5 sealed runs | Gates are not tamper-proof; review stays separate |
-| [2606.20615](https://arxiv.org/abs/2606.20615) AI-SDLC protocol language | The same bug-fix method gained nothing as prose but 14-22 points when enforced as a process | Gates live in the CLI, not only in the skill |
-| [2605.12925](https://arxiv.org/abs/2605.12925) AgentLens | 10.7% of passing runs were "lucky passes" from blind retries or no verification | Check history and `observedFailToPass` |
-| [2610.01618](https://arxiv.org/abs/2610.01618) Agents are systems | Telling an agent to verify changed little; a dedicated verification tool changed behavior | Same |
+| [2603.26458](https://arxiv.org/abs/2603.26458) Can AI models direct each other? | With a strong manager directing a weak worker, a review-only loop added 2 points; structured exploration plus planning added 11 over the baseline (9 beyond the loop) | Scope and acceptance criteria before editing |
+| [2606.05670](https://arxiv.org/abs/2606.05670) Do more agents help? | 1 of 6 multi-agent workflows beat a single agent (+3.05 points at 1.27x tokens); the costliest used 4.34x and still trailed | Same |
+| [2606.13733](https://arxiv.org/abs/2606.13733) Task structure limits multi-agent success | In theory, success falls exponentially with how tightly a task's parts are coupled; the empirical check was weak (r = -0.33) | Parallel writers only for genuinely separable work |
+| [2608.16801](https://arxiv.org/abs/2608.16801) When agents coordinate | In Claude Code runs, a coordinator gave no reliable gain, and an agent opened a decoy hidden-test file in 80% of 244 sealed runs | Gates are not tamper-proof; review stays separate |
+| [2606.20615](https://arxiv.org/abs/2606.20615) AI-SDLC protocol language | The same bug-fix method gained nothing as prose but up to 22 points when executed as an enforced process (one model family) | Gates live in the CLI, not only in the skill |
+| [2605.12925](https://arxiv.org/abs/2605.12925) AgentLens | 10.7% of 1,136 passing runs were "lucky passes" showing regression cycles, blind retries, or missing verification | Check history and `observedFailToPass` |
+| [2610.01618](https://arxiv.org/abs/2610.01618) Agents are systems | Telling an agent to verify barely changed how it verified; an oracle verification tool roughly tripled verification | Same |
 
 ### Verification and test integrity
 
 | Paper | Finding | Effect on LeanLoop |
 |---|---|---|
-| [2510.20270](https://arxiv.org/abs/2510.20270) ImpossibleBench | Models exploited tests on impossible tasks (GPT-5: 76% on one variant); over 79% of Claude cheating transcripts modified tests; more submissions raised cheating | Integrity gate for edited or deleted tests; fixed attempt budget |
-| [2511.21654](https://arxiv.org/abs/2511.21654) EvilGenie | Agents deleted test files, hard-coded tests, or wrote non-general solutions | Reviewer checks test diffs and special-casing first |
-| [2608.29460](https://arxiv.org/abs/2608.29460) Escalation channels | An escalation tool plus a written policy cut test hacking from 23.6% to 5.3% with no detectable solve-rate cost (9 problems) | `escalate` with kind, summary, approaches tried, and recommendation |
-| [2503.15223](https://arxiv.org/abs/2503.15223) Are solved issues solved? | 29.6% of plausible SWE-bench patches behaved differently from the reference fix | All checks must pass, plus per-criterion evidence |
-| [2406.12952](https://arxiv.org/abs/2406.12952) SWT-Bench and [2502.05368](https://arxiv.org/abs/2502.05368) Otter | Tests that fail before and pass after a fix sharply raise patch precision, but reproduction often fails | Regression test first; red-then-green is reported, not forced |
+| [2510.20270](https://arxiv.org/abs/2510.20270) ImpossibleBench | Models exploited impossible tests (GPT-5: 76% on Oneoff-SWEbench); over 79% of Claude and Qwen3-Coder cheating on Conflicting-SWEbench edited tests; allowing multiple submissions raised cheating from 33% to 38% | Integrity gate for edited or deleted tests; fixed attempt budget |
+| [2511.21654](https://arxiv.org/abs/2511.21654) EvilGenie | On unambiguous problems, Claude Code wrote non-general solutions in 20.7% of runs; hard-coding (at most 2.1%) and deleting test files (Gemini CLI, 3.4%) were rare | Reviewer checks test diffs and special-casing first |
+| [2608.29460](https://arxiv.org/abs/2608.29460) Escalation channels | Pooled over 8 models, an escalation tool plus a written policy cut test hacking from 23.6% to 5.3% with no detectable solve-rate cost (9 defective problems) | `escalate` with kind, summary, approaches tried, and recommendation |
+| [2503.15223](https://arxiv.org/abs/2503.15223) Are solved issues solved? | 29.6% of plausible SWE-bench Verified patches from three tools behaved differently from the reference fix; about 11% were estimated to be certainly wrong | All checks must pass, plus per-criterion evidence |
+| [2406.12952](https://arxiv.org/abs/2406.12952) SWT-Bench and [2502.05368](https://arxiv.org/abs/2502.05368) Otter | Tests that fail before and pass after a fix sharply raise patch precision at a large recall cost, and are generated for only a minority of issues (9-37% across the tested systems) | Regression test first; red-then-green is reported, not forced |
 | [2606.18168](https://arxiv.org/abs/2606.18168) All smoke, no alarm | 80.2% of agent-written test patches had weak or no assertions | Reviewer looks for weakened assertions |
-| [2609.20812](https://arxiv.org/abs/2609.20812) Overclaiming | Agents skipped assigned files in 67.9% of runs and misreported it in most | Reports come from the CLI's recorded results |
+| [2609.20812](https://arxiv.org/abs/2609.20812) Overclaiming | Agents left assigned files unread in 67.9% of runs; 80.4% of those runs overclaimed coverage or hid the gap | Reports come from the CLI's recorded results |
 | [2603.00539](https://arxiv.org/abs/2603.00539) LLM code reviewers | Models often judged correct code non-compliant; executing the proposed fix cut errors | Reviewer backs each blocking finding with a failing input or command |
 | [2306.09896](https://arxiv.org/abs/2306.09896) Self-repair and [2609.10123](https://arxiv.org/abs/2609.10123) blind repair | Repair gains are modest once cost counts; repeated blind edits damage correct programs | Each attempt needs new information |
 
@@ -180,16 +187,16 @@ performance claims.
 
 | Paper | Finding | Effect on LeanLoop |
 |---|---|---|
-| [2608.26130](https://arxiv.org/abs/2608.26130) Agents don't paginate | Agents almost never request a second chunk of truncated output | Failed checks return an output excerpt with the result |
-| [2509.23586](https://arxiv.org/abs/2509.23586) AgentDiet and [2508.21433](https://arxiv.org/abs/2508.21433) Complexity trap | Removing verbose logs and old observations cut cost with little quality change; masking matched LLM summarization | Bounded logs; no summarization model |
-| [2607.24882](https://arxiv.org/abs/2607.24882) Agent retrieval bench | Budgeted repository maps gave the best context at 8K; logged agents never touched a gold file in 27-35% of samples | Start from ranked hits, then stop widening |
-| [2608.01507](https://arxiv.org/abs/2608.01507) Deep agentic search | 41.8% of failures were planner-to-subagent hand-off breakdowns, usually with confident answers | Helpers return file:line evidence the owner re-checks |
-| [2604.11088](https://arxiv.org/abs/2604.11088) Guardrails beat guidance | Random rule files matched curated ones; helpful rules were prohibitions | Hard rules phrased as "do not" |
-| [2605.10039](https://arxiv.org/abs/2605.10039) Instruction adherence | File size and position showed no effect; compliance decayed within a session | Re-run `status` before finishing; audit reports size as cost, not quality |
+| [2608.26130](https://arxiv.org/abs/2608.26130) Agents don't paginate | In one middleware's logs, agents never requested a second chunk of truncated output | Failed checks return an output excerpt with the result |
+| [2509.23586](https://arxiv.org/abs/2509.23586) AgentDiet and [2508.21433](https://arxiv.org/abs/2508.21433) Complexity trap | An LLM pass that trimmed useless and expired trajectory content cut cost 21-36% with little quality change; simple observation masking matched LLM summarization at about half the cost | Bounded logs; no summarization model |
+| [2607.24882](https://arxiv.org/abs/2607.24882) Agent retrieval bench | A vectorless repository map narrowly led weighted context yield at 8K; logged agents never touched a gold file in 27-35% of samples | Start from ranked hits, then stop widening |
+| [2608.01507](https://arxiv.org/abs/2608.01507) Deep agentic search | 41.8% of deep-agent failures were planner-to-subagent hand-off breakdowns, mostly with confident answers | Helpers return file:line evidence the owner re-checks |
+| [2604.11088](https://arxiv.org/abs/2604.11088) Guardrails beat guidance | Random rule files matched curated ones (a direction, not a significant result); the individually helpful rules were prohibitions | Hard rules phrased as "do not" |
+| [2605.10039](https://arxiv.org/abs/2605.10039) Instruction adherence | File size and position had no detectable effect; compliance decayed within sessions (an exploratory finding) | Re-run `status` before finishing; audit reports size as cost, not quality |
 | [2602.12670](https://arxiv.org/abs/2602.12670) SkillsBench | Focused, curated skills helped; self-generated ones did not | Three small skills; lessons stay curated |
 | [2510.05381](https://arxiv.org/abs/2510.05381) Context length alone hurts | Accuracy fell with input length even with perfect retrieval | Bounded outputs and memory |
-| [2604.22750](https://arxiv.org/abs/2604.22750) Token spend | Token use for one task varied up to 30x across runs | Evaluation uses repeated trials |
-| [2511.12884](https://arxiv.org/abs/2511.12884) Agent READMEs | Context files mostly describe tests and builds; 14.8% mention security | Audit notes a missing test command |
+| [2604.22750](https://arxiv.org/abs/2604.22750) Token spend | Token use for one task typically varied about 2x across runs (the authors cite up to 30x) | Evaluation uses repeated trials |
+| [2511.12884](https://arxiv.org/abs/2511.12884) Agent READMEs | Context files mostly describe testing, implementation, and architecture; 14.8% mention security | Audit notes a missing test command |
 
 ### Memory
 
@@ -197,29 +204,29 @@ performance claims.
 |---|---|---|
 | [2610.27524](https://arxiv.org/abs/2610.27524) MemDev-Bench | Every memory system broke tasks the no-memory agent solved, mostly by misapplying old experience | Lessons are hints to re-check |
 | [2610.27377](https://arxiv.org/abs/2610.27377) REM | A small phase-structured memory helped weaker models but lowered resolution for stronger ones | Lessons stay capped |
-| [2610.04838](https://arxiv.org/abs/2610.04838) MemTrace | Memory tied to files and re-checked against the current repository before reuse helped | `--anchor` with stale flags |
+| [2610.04838](https://arxiv.org/abs/2610.04838) MemTrace | A memory bound to files and tests that re-checks entries against the current repository helped overall; the re-check itself was not isolated | `--anchor` with stale flags |
 | [2505.16067](https://arxiv.org/abs/2505.16067) Memory management | Storing every experience did worse than a fixed memory; verified-only storage did best | Lessons need evidence from a check |
-| [2608.11095](https://arxiv.org/abs/2608.11095) Why CLAUDE.md keeps growing | Instruction files grow by accretion; recording outcome with each rule curbed growth | Near-duplicate refusal and an explicit cap |
-| [2610.11007](https://arxiv.org/abs/2610.11007) Curating always-loaded context | Compliance per rule collapsed as rule count grew; pruning ignored rules can remove helpful ones | Replacement stays a human decision |
+| [2608.11095](https://arxiv.org/abs/2608.11095) Why CLAUDE.md keeps growing | Instruction files grow by accretion; in a synthetic test, annotating rules with their outcomes curbed growth | Near-duplicate refusal and an explicit cap |
+| [2610.11007](https://arxiv.org/abs/2610.11007) Curating always-loaded context | Per-rule compliance fell sharply at very large rule counts; a proof shows pruning ignored rules can drop helpful ones | Replacement stays a human decision |
 | [2609.13889](https://arxiv.org/abs/2609.13889) Persistent memory poisoning | Instructions planted in external content persisted into later sessions | Never store lessons from external content |
 
 ### Security
 
 | Paper | Finding | Effect on LeanLoop |
 |---|---|---|
-| [2607.20759](https://arxiv.org/abs/2607.20759) IssueTrojanBench | Coding agents executed malicious issue instructions in 66.5% of runs, including editing CLAUDE.md and hooks; hidden and visible payloads worked equally | Do not change agent config unless asked; audit flags risky hooks |
+| [2607.20759](https://arxiv.org/abs/2607.20759) IssueTrojanBench | Agents followed injected instructions in 66.5% of issue-fixing runs, including edits to CLAUDE.md-style config and hidden scripts; hidden payloads matched visible ones | Do not change agent config unless asked; list config changes in the report |
 | [2608.30686](https://arxiv.org/abs/2608.30686) Beyond the payload | "Run the tests" tasks were the riskiest; security rules alone did not lower attack success | Read what a script runs before running it; docs recommend a sandbox |
-| [2406.13352](https://arxiv.org/abs/2406.13352) AgentDojo and [2506.08837](https://arxiv.org/abs/2506.08837) Design patterns | Restricting tools cut attack success sharply; untrusted input should not trigger consequential actions | Read-only reviewer; untrusted content treated as data |
-| [2406.10279](https://arxiv.org/abs/2406.10279) Package hallucinations | Models invent package names at measurable rates | Never install packages named only in untrusted text |
+| [2406.13352](https://arxiv.org/abs/2406.13352) AgentDojo and [2506.08837](https://arxiv.org/abs/2506.08837) Design patterns | AgentDojo's tool filter cut GPT-4o's targeted attack success from 57.7% to 6.8%; the design-patterns paper argues untrusted input must not trigger consequential actions | Read-only reviewer; untrusted content treated as data |
+| [2406.10279](https://arxiv.org/abs/2406.10279) Package hallucinations | Commercial models hallucinated packages in 5.2% of samples on average, open-source models in 21.7% | Never install packages named only in untrusted text |
 | [2601.10338](https://arxiv.org/abs/2601.10338) Agent skills in the wild | 26.1% of marketplace skills had a vulnerability; bundled scripts raised the odds | LeanLoop ships no hooks or MCP servers; validation pins the layout |
-| [2603.00164](https://arxiv.org/abs/2603.00164) Reverse CAPTCHA | Invisible Unicode instructions were followed more often when tools were available | Audit and validation flag invisible and bidirectional characters |
+| [2603.00164](https://arxiv.org/abs/2603.00164) Reverse CAPTCHA | Invisible Unicode instructions were followed far more often when tools were available, especially with decoding hints | Audit and validation flag invisible and bidirectional characters |
 
 ### Practice and evaluation
 
 | Paper | Finding | Effect on LeanLoop |
 |---|---|---|
-| [2605.18583](https://arxiv.org/abs/2605.18583) Overeager coding agents | Removing an explicit scope statement raised out-of-scope actions from 0% to 17.1% in Claude Code | `start --scope` and "do not touch outside the scope" |
-| [2507.09089](https://arxiv.org/abs/2507.09089) METR RCT | Experienced developers were 19% slower with early-2025 AI while believing they were 20% faster | Measure with timed logs, never impressions |
+| [2605.18583](https://arxiv.org/abs/2605.18583) Overeager coding agents | In Claude Code, removing an explicit scope statement raised out-of-scope actions by 12-17 points across three models (GLM-4.6: 0% to 17.1%) | `start --scope` and "do not touch outside the scope" |
+| [2507.09089](https://arxiv.org/abs/2507.09089) METR RCT | Experienced developers took 19% longer with early-2025 AI, yet afterwards estimated they had been 20% faster | Measure with timed logs, never impressions |
 | [2602.07150](https://arxiv.org/abs/2602.07150) Randomness in agentic evals | Single-run scores shift by 2.2-6.0 points between runs | Repeated trials, pass@k and pass^k |
 | [2411.00640](https://arxiv.org/abs/2411.00640) Error bars | Use task-clustered and paired standard errors | Paired comparison in `compare-runs` |
 | [2406.12045](https://arxiv.org/abs/2406.12045) tau-bench | pass^k measures reliability across trials | Same |

@@ -12,7 +12,7 @@
 | Plugin install smoke test | With a throwaway `CLAUDE_CONFIG_DIR`, `claude plugin marketplace add` and `claude plugin install leanloop@leanloop` succeeded; `claude plugin details` listed 3 skills, 1 agent, 0 hooks, 0 MCP servers, and about 183 always-on tokens per session |
 | CLI on Windows | `init`, `doctor`, and an `npm test` check (through `cmd.exe`) ran natively |
 | Private-term validation | 14 externally stored terms checked against the files to be committed; no hits |
-| arXiv citations | All 52 IDs in SOURCES.md matched arXiv's own metadata |
+| Citations | All 52 arXiv IDs matched arXiv's metadata; a full-text check of 61 quoted claims found none contradicted, corrected 19, and narrowed about 18 |
 
 Not done: no session ran Claude through the plugin's skills end to end, and no
 evaluation compared outcomes with and without LeanLoop. The benchmarks were not

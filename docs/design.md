@@ -20,12 +20,14 @@ What the [public evidence](../SOURCES.md) says, in short:
 - Splitting a task across agents loses context. Cognition's guidance is to share
   full context and keep writes single-threaded; read-only helpers and review
   loops are the patterns it still sees working.
-- A study of over 1,600 multi-agent traces found 41-86.7% failure rates, mostly
-  from system design and inter-agent misalignment, not model limits.
+- A study of over 1,600 multi-agent traces across seven frameworks found
+  41-86.7% failure rates, classified into system design, inter-agent
+  misalignment, and task verification failures.
 - Controlled comparisons (260 configurations, five architectures, three model
   families) found results relative to a single agent ranging from +80.8% on
-  decomposable financial reasoning to -70.0% on sequential planning, with extra
-  overhead on tool-heavy tasks: match coordination to task structure.
+  decomposable financial reasoning to -70.0% on sequential planning (the best and
+  worst cells), with extra overhead on tool-heavy tasks: match coordination to
+  task structure.
 - Small single-agent loops (mini-SWE-agent) and fixed pipelines (Agentless)
   reach strong benchmark results without role chains.
 
@@ -206,8 +208,8 @@ structured record: a conflict between tests and the specification, an exhausted
 budget, missing access, or unclear scope. It moves the task to `blocked` and
 shows the record in `status`. When the attempt budget runs out, the error points
 to `escalate` before `extend`. In one controlled study, an escalation channel
-plus a written policy cut test hacking from 23.6% to 5.3%; that result came from
-nine problems and does not transfer automatically.
+plus a written policy cut test hacking from 23.6% to 5.3%, pooled over eight models;
+the result came from nine defective problems and does not transfer automatically.
 
 Each check run appends a bounded history entry (at most 100 per task) with name,
 result, exit code, and a short fingerprint. `status` derives `observedFailToPass`:
@@ -225,7 +227,7 @@ dated, evidence-backed entries to `leanloop.lessons.md`. The file holds at
 most 30 entries and 8 KiB. When it is full, `learn` refuses until a stale entry
 is replaced (`--replace ID`) or removed (`forget ID`).
 
-Why a hard cap: accuracy drops as input grows, well before context limits
+Why a hard cap: performance degrades as input grows, even on simple tasks
 ("context rot"), and information in the middle of long inputs is used least.
 Append-only learnings files grow with every task until each agent start pays for
 all of them. Replacing an entry is a small, targeted edit, which also avoids the
@@ -238,7 +240,7 @@ size, not their truth. Reads enforce the same 30-entry/8 KiB caps. If hand edits
 exceed them, curate the file before using the CLI; it will not silently discard
 entries or load oversized memory.
 
-Studies of coding-agent memory found that every memory system tested broke some
+One coding-agent memory benchmark found that every memory system tested broke some
 tasks the agent would otherwise solve, mostly by applying old experience where it
 no longer fit. So lessons are hints: the skill tells the owner to confirm a
 lesson against the current files, to record only lessons backed by a check it
@@ -333,6 +335,6 @@ User-requested explanation, safety information, uncertainty, and failures take
 priority over brevity. No diagnosis or medical assumption is encoded.
 
 The report rules adapt ideas from an output-style skill whose own evaluation
-showed gains in progress and error reports, and one regression where requiring
-"cause, then fix" pushed the model to state an unsupported cause. Hence the
-explicit "cause unknown" rule and no mandatory time estimates.
+showed gains in progress and error reports, and one regression its author
+suspects came from requiring "cause, then fix", which can push an unsupported
+cause. Hence the explicit "cause unknown" rule and no mandatory time estimates.
