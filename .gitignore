@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.tgz
+.leanloop/
+
+# Personal review notes about private projects: keep them out of version control.
+README-REVIEW.md

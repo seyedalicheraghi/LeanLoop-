@@ -1,0 +1,8 @@
+{
+  "name": "leanloop",
+  "version": "0.4.0",
+  "description": "Single-owner engineering, bounded context and memory, overhead audit, local checkpoints, and explicit verification.",
+  "license": "MIT",
+  "skills": "./skills",
+  "agents": "./agents"
+}
