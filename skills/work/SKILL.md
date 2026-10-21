@@ -20,6 +20,8 @@ JSON: report what it shows, not what you expect.
 - Small, low-risk change: edit, run the most relevant test, report.
 - Larger or risky change: the loop below. High risk (auth, data loss,
   migrations, concurrency, public APIs): `start --risk high`.
+- Change across two or more components with their own checks: also follow
+  "Multi-component changes".
 - No `leanloop.json`: say `/leanloop:setup` creates it. You may still edit and
   test, but do not claim a LeanLoop completion.
 
@@ -41,6 +43,22 @@ JSON: report what it shows, not what you expect.
 - Delegate only a separable read-only question (e.g. Explore across many
   modules) or the final review. Ask for file:line evidence and verify it. Do not
   hand implementation to another agent or chain role agents.
+
+## Multi-component changes
+
+For components (packages, services, apps) that have their own checks:
+
+1. Map before reading: one read-only Explore helper lists the affected
+   components, entry points, and checks as file:line. Verify what you use.
+2. Split into smaller tasks, one per component, each with its own criteria,
+   `--scope`, and checks.
+3. LeanLoop's gate: `finish` needs every check passing, so a component can be
+   its own task only if it leaves all checks green. Otherwise keep one task: fix
+   components one at a time, run each one's tests directly (every `check` uses
+   the attempt budget), then `check` once.
+4. `checkpoint` after each component or step, with the remaining ones as
+   `--next`. The user may clear the context between steps; `status` restores
+   the plan.
 
 ## Change and verify
 

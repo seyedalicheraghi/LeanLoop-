@@ -1,6 +1,6 @@
 {
   "name": "leanloop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "One owner, small context, evidence before done: Claude Code finishes only on fresh checks, edited tests need review, and setup overhead is audited.",
   "author": {
     "name": "Ali Cheraghi"

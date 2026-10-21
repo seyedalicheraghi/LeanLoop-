@@ -1,6 +1,6 @@
 {
   "name": "leanloop-kit",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A Claude Code plugin for single-owner, evidence-gated engineering: bounded context and memory, test-integrity review, and a setup overhead audit.",
   "private": true,
   "type": "module",

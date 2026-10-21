@@ -122,3 +122,17 @@ test('failed checks carry an output excerpt; passing checks and checkpoints reco
   assert.equal(Object.hasOwn(green.results[0], 'excerpt'), false);
   assert.deepEqual(status(root).observedFailToPass, ['unit']);
 });
+
+test('a finished step keeps its last checkpoint in status, so a multi-step plan survives a cleared context', async t => {
+  const root = await fixture(t);
+  await startTask(root, { goal: 'Step 1: api', criteria: ['api check passes'], scope: ['src'] });
+  assert.equal((await verify(root)).ok, true);
+  await recordProof(root, 1, 'api check passed on the final source.');
+  await checkpoint(root, 'api migrated to the new field.', 'Start step 2: migrate billing, then step 3: report.');
+  assert.equal((await finish(root)).phase, 'done');
+  const resumed = status(root);
+  assert.equal(resumed.phase, 'done');
+  assert.match(resumed.next.next, /step 2: migrate billing/);
+  await startTask(root, { goal: 'Step 2: billing', criteria: ['billing check passes'] });
+  assert.equal(status(root).next, null);
+});

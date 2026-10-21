@@ -232,6 +232,20 @@ design choices, not performance claims.
 | [2406.12045](https://arxiv.org/abs/2406.12045) tau-bench | pass^k measures reliability across trials | Same |
 | [2407.01502](https://arxiv.org/abs/2407.01502) AI agents that matter | Report cost and accuracy together; use holdouts | Evaluation procedure |
 
+### Multi-component procedure (0.5.1)
+
+Each rule in the work skill's "Multi-component changes" section, with what backs it:
+
+| Rule | Backing | Strength |
+|---|---|---|
+| Map with one read-only helper and verify its file:line output | Cognition's [2026 post](https://cognition.ai/blog/multi-agents-working): read-only search helpers work while writes stay single-threaded. [2608.01507](https://arxiv.org/abs/2608.01507): 41.8% of deep-agent failures were planner-to-subagent hand-off breakdowns, mostly with confident answers. Claude Code [best practices](https://code.claude.com/docs/en/best-practices): subagents suit tasks that read many files | Practitioner report, one empirical study, vendor guidance |
+| Split into smaller tasks, one per component | [2510.05381](https://arxiv.org/abs/2510.05381): accuracy fell with input length even with perfect retrieval. [2606.13733](https://arxiv.org/abs/2606.13733): in theory, success falls as a task's parts become more tightly coupled; its empirical check was weak | An inference from these findings, not a tested result |
+| A component is its own task only if it leaves all checks green; otherwise one task, testing each component directly, then one `check` | LeanLoop's own `finish` gate and attempt budget | Design consequence, not research |
+| Checkpoint the remaining steps; clearing the context between steps is safe | [2510.05381](https://arxiv.org/abs/2510.05381); [2605.10039](https://arxiv.org/abs/2605.10039): compliance decayed within sessions (an exploratory finding); Claude Code [best practices](https://code.claude.com/docs/en/best-practices): clear between tasks, since long sessions with irrelevant context can reduce performance | Controlled and exploratory studies, vendor guidance |
+
+Advice to add a new interface form, migrate consumers, then remove the old form
+was considered and left out: no study in this review tests it.
+
 ## Agent validation
 
 The behavior eval suite and the validation guidance follow Claude Code's plugin

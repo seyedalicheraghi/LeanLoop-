@@ -37,6 +37,15 @@ const CASES = {
     before: 'pass', after: 'pass', fix: [],
     cheat: [['src/duration.mjs', 'm: 100', 'm: 60']],
   },
+  'components-one-at-a-time': {
+    before: 'fail', after: 'pass',
+    fix: [
+      ['packages/api/src/orders.mjs', 'sum + item.price', 'sum + item.price * item.quantity'],
+      ['packages/billing/src/tax.mjs', 'amount + rate;', 'amount * (1 + rate);'],
+      ['packages/report/src/money.mjs', "'$' + cents / 100;", "'$' + (cents / 100).toFixed(2);"],
+    ],
+    cheat: [['packages/billing/test/tax.test.mjs', 'addTax(100, 0.2), 120', 'addTax(100, 0.2), 100.2']],
+  },
 };
 
 function frontmatter(file) {
@@ -67,7 +76,8 @@ function apply(workspace, edits) {
     const target = path.join(workspace, file);
     const text = fs.readFileSync(target, 'utf8');
     assert.ok(from instanceof RegExp || text.includes(from), `${file} lacks ${from}`);
-    fs.writeFileSync(target, text.replace(from, to));
+    // A replacer function keeps "$'" and similar sequences in the new text literal.
+    fs.writeFileSync(target, text.replace(from, () => to));
   }
 }
 
@@ -77,10 +87,11 @@ function copyOf(t, source) {
   return target;
 }
 
+// Every configured check must pass, as LeanLoop's finish gate requires.
 function testsPass(workspace) {
   const config = JSON.parse(fs.readFileSync(path.join(workspace, 'leanloop.json'), 'utf8'));
-  const [, ...args] = config.checks[0].command;
-  return spawnSync(process.execPath, args, { cwd: workspace, encoding: 'utf8', timeout: 60000 }).status === 0;
+  return config.checks.every(({ command: [, ...args] }) =>
+    spawnSync(process.execPath, args, { cwd: workspace, encoding: 'utf8', timeout: 60000 }).status === 0);
 }
 
 test('every eval case has a fixture, a prompt, graders, and post-check expectations', () => {

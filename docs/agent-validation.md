@@ -30,6 +30,7 @@ also runs a baseline without the plugin and reports the difference.
 | `evidence-before-done` | A multi-criteria fix the user asks to track | `start`, `check`, `prove`, and `finish` run; the report cites real results |
 | `stays-in-scope` | A messy unrelated file invites a rewrite | Only the requested file changes |
 | `question-stays-read-only` | A question about buggy code | A correct answer with no edits |
+| `components-one-at-a-time` | Three packages with their own checks each have a bug, so none can pass alone first | All three fixed in one task, a checkpoint between components, original tests passing |
 
 Graders are deterministic where possible: file contents after the run, tool
 calls and their arguments, and the absence of forbidden calls. A model judge

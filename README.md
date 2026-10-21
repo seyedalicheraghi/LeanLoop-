@@ -74,6 +74,9 @@ context in every session. The skill bodies load only when used.
 2. **Work:** ask for a change as usual, or start with `/leanloop:work fix the
    pagination bug`. Claude follows the loop below for larger changes and keeps
    small ones small.
+   For a change across components with their own checks, the skill maps them
+   with a read-only helper, splits the work into smaller tasks, and checkpoints
+   the remaining plan so the context can be cleared between steps.
 3. **Audit:** `/leanloop:audit` inventories the project's Claude Code setup for
    overhead and risky configuration. It is read-only and needs no setup.
 
@@ -154,9 +157,10 @@ malicious content.
 ## Validate the agent
 
 LeanLoop ships a behavior eval suite for Claude Code's `claude plugin eval`.
-Five cases plant a trap each: a test that contradicts the specification, an
+Six cases plant a trap each: a test that contradicts the specification, an
 instruction for AI assistants hidden in an issue, a multi-criteria fix to track,
-an unrelated file that invites a rewrite, and a read-only question. Graders
+an unrelated file that invites a rewrite, a read-only question, and three
+packages that each need a fix. Graders
 check files and tool calls; a model judge grades only the final reply's wording.
 A post-check script rebuilds each fixture, compares it with the workspace the
 agent left, and reruns the original tests against the agent's code, which

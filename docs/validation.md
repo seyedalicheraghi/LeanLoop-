@@ -1,5 +1,18 @@
 # Validation record
 
+## 0.5.1 multi-component procedure (2026-10-20)
+
+The work skill gained a "Multi-component changes" section that keeps only
+rules with research or design backing (see [SOURCES.md](../SOURCES.md#multi-component-procedure-051)).
+The work skill plus reviewer use 7,096 of 8,192 bytes. A new eval case,
+`components-one-at-a-time`, and a regression test (a finished step keeps its
+last checkpoint in `status`) were added. On WSL Ubuntu 24.04 with Node 18.19.1,
+all 9 eval-suite tests passed, and the full suite passed 124 of 125 (1 Windows-only
+skip); on Windows 11 with Node 24.13.1 it passed 114 of 125 (11 skipped). Two string-replace
+bugs were found and fixed while building the case: a `$'` sequence in
+replacement text expanded to the rest of the input, once in the eval generator
+and once in the test helper.
+
 ## 0.5.0 Claude Code plugin (2026-10-20)
 
 | Check | Observed result |
