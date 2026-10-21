@@ -16,6 +16,10 @@
   enabled plugin pays for them in each session.
 - Write invisible or bidirectional Unicode only as escape sequences; validation
   rejects literal ones anywhere in the package.
+- Every behavior eval case needs a scaffold, deterministic graders where
+  possible, a binary judge rubric only for wording, post-check expectations, and
+  a reference fix and cheat in tests/evals.test.mjs. Running evals bills model
+  usage: run them only when the user asks, with a pinned model and a cost cap.
 - Use the smallest relevant test selection while iterating. Before distribution,
   run `npm test` on Windows and on Linux or macOS, `npm run validate` (which runs
   `claude plugin validate --strict` when Claude Code is installed), and a local

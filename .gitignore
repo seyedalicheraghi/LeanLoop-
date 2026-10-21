@@ -6,3 +6,4 @@ coverage/
 
 # Personal review notes about private projects: keep them out of version control.
 README-REVIEW.md
+evals/results/

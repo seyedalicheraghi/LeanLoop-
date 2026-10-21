@@ -232,6 +232,12 @@ design choices, not performance claims.
 | [2406.12045](https://arxiv.org/abs/2406.12045) tau-bench | pass^k measures reliability across trials | Same |
 | [2407.01502](https://arxiv.org/abs/2407.01502) AI agents that matter | Report cost and accuracy together; use holdouts | Evaluation procedure |
 
+## Agent validation
+
+The behavior eval suite and the validation guidance follow Claude Code's plugin
+evals and the frameworks, practitioner guides, and papers listed in
+[Validating agents](docs/agent-validation.md#sources), checked on 2026-10-20.
+
 ## Runtime and format references
 
 - [Claude Code plugins](https://code.claude.com/docs/en/plugins/components),

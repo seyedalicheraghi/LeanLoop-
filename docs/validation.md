@@ -14,6 +14,14 @@
 | Private-term validation | 14 externally stored terms checked against the files to be committed; no hits |
 | Citations | All 52 arXiv IDs matched arXiv's metadata; a full-text check of 61 quoted claims found none contradicted, corrected 19, and narrowed about 18 |
 
+Behavior evals added after 0.5.0 (same day): five `claude plugin eval` cases,
+a workspace post-check, and tests of the suite itself. On WSL Ubuntu 24.04 with
+Node 18.19.1, all 8 suite tests passed: every fixture reproduced its problem,
+every reference fix passed (the conflicting-test case stays impossible as
+written), and every planted cheat was caught by the post-check. On Windows the
+fixture tests skip, as plugin evals with Bash need Linux, macOS, or WSL2. The
+suite has not yet been run against Claude.
+
 Not done: no session ran Claude through the plugin's skills end to end, and no
 evaluation compared outcomes with and without LeanLoop. The benchmarks were not
 rerun; the context and fingerprint code they measure did not change.

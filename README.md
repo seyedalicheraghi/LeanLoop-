@@ -151,6 +151,20 @@ its output at 16 KiB. It exits 1 for high-severity findings or an incomplete
 inspection. Findings are structural indicators, not measured tokens or proof of
 malicious content.
 
+## Validate the agent
+
+LeanLoop ships a behavior eval suite for Claude Code's `claude plugin eval`.
+Five cases plant a trap each: a test that contradicts the specification, an
+instruction for AI assistants hidden in an issue, a multi-criteria fix to track,
+an unrelated file that invites a rewrite, and a read-only question. Graders
+check files and tool calls; a model judge grades only the final reply's wording.
+A post-check script rebuilds each fixture, compares it with the workspace the
+agent left, and reruns the original tests against the agent's code, which
+catches test edits made through the shell. `npm test` checks the suite itself
+for free; running it against Claude is billed and needs Linux, macOS, or WSL2.
+See [Validating agents](docs/agent-validation.md), which also covers how to
+validate agents in your own projects.
+
 ## What is bounded
 
 | Resource | Behavior |
@@ -197,7 +211,7 @@ and dependencies yourself.
 ## Develop and test
 
 ```sh
-npm test                    # regression tests on synthetic temporary Git projects
+npm test                    # regression tests, including the eval suite's fixtures and graders
 npm run validate            # manifests, frontmatter, budgets, links, hidden Unicode,
                             # and `claude plugin validate --strict` when claude is installed
 npm run benchmark           # filename ranking over 100,000 synthetic paths
@@ -216,6 +230,7 @@ hostnames) one per line in a file outside this folder and run
 
 - [Design, guarantees, and limits](docs/design.md)
 - [Migration from earlier versions](docs/migration.md)
+- [Validating agents](docs/agent-validation.md)
 - [Evaluation procedure](docs/evaluation.md)
 - [Validation record](docs/validation.md)
 - [Research and source provenance](SOURCES.md)
