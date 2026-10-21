@@ -1,5 +1,29 @@
 # Validation record
 
+## 0.6.0 swarm mode, code reviewer, and stronger gates (2026-10-21)
+
+What changed: swarm mode (design A: `/leanloop:build` and `leanloop swarm`
+helpers; LeanLoop starts no model sessions), the `leanloop:code-reviewer` agent
+and `/leanloop:review`, `resume --decision` and the `ESCALATED` stop, integrity
+over check-definition files, start-time manifests, scope
+(`SCOPE_REVIEW_REQUIRED`), and flaky checks, the audit's AGENTS.md and
+CLAUDE.local.md coverage, and a stricter eval post-check (TAP counts, frozen
+assertions, fingerprint-checked ledger).
+
+| Check | Observed result |
+|---|---|
+| `npm test`, Windows 11 (eval fixtures through Git Bash) | Node 24.13.1: 170 tests, 166 passed, 0 failed, 4 skipped |
+| `npm test`, WSL Ubuntu 24.04, Node 18.19.1 (below the declared Node 22 engine) | `node --test tests/*.test.mjs` on a copy in `~/ll-final` (without .git, dist, .leanloop): 170 tests, 167 passed, 0 failed, 3 skipped |
+| New regression tests | `tests/swarm.test.mjs` on real temporary Git repositories (validation, start, prepare ordering, accept refusing unfinished, mismatched, or out-of-scope work including `.leanloop/` paths, merge with conflict and failed-check rollback, sealed verification, status, abandon keeping dirty worktrees); escalation and `resume`; integrity without a base commit; check-definition files, including ignored ones; out-of-scope review; bounded check timeouts; Windows shim and path-casing cases; eval post-check TAP counts, frozen assert, and fingerprint-checked ledger; audit AGENTS.md, CLAUDE.local.md, and name sanitizing. Removing the ownership check, the rollback reset, the dependency gate, the `.leanloop` exemption fix, or the run-existence check each made a test fail |
+| `npm run validate` | Passed on Windows 11 with Node 24.13.1 during the documentation update: 36 scripts, 65 Markdown files, no dependencies; work skill plus `leanloop-reviewer` 7,477 / 8,192 bytes; code reviewer 6,428 / 8,192; all skills and agents 20,463 / 24,576; `claude plugin validate --strict` passed. Rerun at release |
+| Citations | The 8 arXiv IDs added for the code reviewer, plus 2606.00953 and 2610.17471, were matched against their arXiv abstract pages on 2026-10-21; every non-arXiv source in the new SOURCES.md sections opened, and the cited sections of the incident report (introduction, prior activity, security lessons) were read in its extracted text |
+| Plugin install smoke test, private-term validation | With a throwaway `CLAUDE_CONFIG_DIR`, the local marketplace installed `leanloop@leanloop` 0.6.0: 5 skills, 2 agents, 0 hooks, 0 MCP servers, about 317 always-on tokens per session; the real configuration was untouched. A 14-term private list found no hits in the files to be committed |
+
+Not done: no swarm run has driven real Claude Code subagents end to end, and
+the open items in [swarm-design.md](swarm-design.md#open-items-to-verify-on-first-run)
+are unverified. The behavior evals have not been run against Claude. No speed,
+cost, or quality comparison of swarm and guided mode was made.
+
 ## 0.5.1 multi-component procedure (2026-10-20)
 
 The work skill gained a "Multi-component changes" section that keeps only

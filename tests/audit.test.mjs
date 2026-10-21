@@ -497,6 +497,28 @@ test('audit keeps exact model identities before bounding the display', t => {
   assert.ok(Object.values(report.agents.pinnedModels).every(count => Number.isSafeInteger(count)));
 });
 
+test('a differently spelled path to the worktree root still uses the Git inventory', t => {
+  const root = project(t);
+  git(root, ['init', '--initial-branch=main']);
+  write(root, 'CLAUDE.md', '# Rules\nTest with `npm test`.\n');
+  write(root, '.gitignore', 'ignored/\n');
+  write(root, 'ignored/CLAUDE.md', '# Ignored rules\n');
+  const expected = audit(root);
+  assert.equal(expected.inventory.source, 'git');
+  // A ".." segment resolves to the same root on every platform.
+  const variants = [`${root}${path.sep}ignored${path.sep}..`];
+  if (process.platform === 'win32') variants.push(root[0].toLowerCase() + root.slice(1), root.toUpperCase());
+  for (const variant of variants) {
+    const report = audit(variant);
+    assert.equal(report.inventory.source, 'git', variant);
+    // The Git inventory leaves the ignored guide out; a filesystem walk would count it.
+    assert.deepEqual(report.inventory.surfaces.nestedGuides, expected.inventory.surfaces.nestedGuides, variant);
+    assert.deepEqual(report.inventory.surfaces.instructions, expected.inventory.surfaces.instructions, variant);
+  }
+  // A nested directory is not the worktree root, so it keeps the filesystem inventory.
+  assert.equal(audit(path.join(root, 'ignored')).inventory.source, 'filesystem');
+});
+
 test('Git failures are reported rather than silently falling back to a different inventory', t => {
   const root = temporary(t);
   const emptyPath = temporary(t);

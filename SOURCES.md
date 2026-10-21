@@ -3,7 +3,8 @@
 Reviewed on 2026-10-20 (0.1.0) and reassessed for 0.2.0 and 0.3.0 the same day.
 Version 0.4.0 renamed the project from lean-workflow to LeanLoop. Version 0.5.0
 made it a Claude Code plugin and added the [research review](#research-reviewed-for-050)
-below. This implementation, its prompts, and its tests were written independently. No
+below. Version 0.6.0 added swarm mode and the sources for the [code reviewer](#code-reviewer)
+and for [incidents and containment](#incidents-and-containment), checked on 2026-10-21. This implementation, its prompts, and its tests were written independently. No
 third-party runtime code or skill text is vendored. The MIT license covers this
 package's original files; source references do not relicense upstream work or
 determine rights outside this package.
@@ -160,9 +161,10 @@ design choices, not performance claims.
 |---|---|---|
 | [2609.04898](https://arxiv.org/abs/2609.04898) RefactorPlatform | A lean single agent with retrieval scored 86% against 66% for a sub-agent setup on 100 matched refactoring tasks (one model, one run) | One owner stays the default |
 | [2609.32459](https://arxiv.org/abs/2609.32459) Harness effects | Task-specific sub-agents and a tool registry helped; general sub-agents and context compression hurt; harness gains shrank with stronger models on issue repair, not on ProgramBench | Delegate only narrow read-only questions or review; audit flags agents with every tool |
-| [2610.17471](https://arxiv.org/abs/2610.17471) Teams of coding agents | Teams beat a solo agent at 3-7x the cost; delegating only planning matched full delegation at half the cost; cheap implementers lowered reward | No implementation hand-offs to other agents |
+| [2610.17471](https://arxiv.org/abs/2610.17471) Teams of coding agents | On ProgramBench, teams beat a solo agent at 3-7x the cost; delegating only planning matched full delegation at half the cost; cheap implementers lowered reward; implementers and verifiers plateaued beyond four workers | Guided mode keeps one owner. Swarm mode (0.6.0) is reserved for decomposable projects with a strong lead and no cheaper implementers, with at most 4 workers at once |
 | [2603.26458](https://arxiv.org/abs/2603.26458) Can AI models direct each other? | With a strong manager directing a weak worker, a review-only loop added 2 points; structured exploration plus planning added 11 over the baseline (9 beyond the loop) | Scope and acceptance criteria before editing |
 | [2606.05670](https://arxiv.org/abs/2606.05670) Do more agents help? | 1 of 6 multi-agent workflows beat a single agent (+3.05 points at 1.27x tokens); the costliest used 4.34x and still trailed | Same |
+| [2606.00953](https://arxiv.org/abs/2606.00953) Cohesion-aware partitioning | Partitioning a repository's dependency graph so tightly coupled code stays with one agent beat sequential and file-based parallel baselines on pass rate, time, and cost (checked 2026-10-21) | Swarm packages split by dependency cohesion, not by file |
 | [2606.13733](https://arxiv.org/abs/2606.13733) Task structure limits multi-agent success | In theory, success falls exponentially with how tightly a task's parts are coupled; the empirical check was weak (r = -0.33) | Parallel writers only for genuinely separable work |
 | [2608.16801](https://arxiv.org/abs/2608.16801) When agents coordinate | In Claude Code runs, a coordinator gave no reliable gain, and an agent opened a decoy hidden-test file in 80% of 244 sealed runs | Gates are not tamper-proof; review stays separate |
 | [2606.20615](https://arxiv.org/abs/2606.20615) AI-SDLC protocol language | The same bug-fix method gained nothing as prose but up to 22 points when executed as an enforced process (one model family) | Gates live in the CLI, not only in the skill |
@@ -245,6 +247,49 @@ Each rule in the work skill's "Multi-component changes" section, with what backs
 
 Advice to add a new interface form, migrate consumers, then remove the old form
 was considered and left out: no study in this review tests it.
+
+## Code reviewer
+
+The `leanloop:code-reviewer` agent (added after 0.5.1, shipped in 0.6.0) and
+`/leanloop:review` draw on the sources below, checked on 2026-10-21. Every arXiv
+ID and title was matched against its arXiv abstract page. The papers are
+preprints or single studies that did not evaluate LeanLoop; they justify the
+reviewer's rules, not a claim about its accuracy.
+
+### Practice and tools
+
+| Source | What informed the reviewer | What was not assumed |
+|---|---|---|
+| Google, [How to do a code review](https://google.github.io/eng-practices/review/reviewer/) (eng-practices reviewer guide) | Reviewing in passes: what to look for, navigating a change, writing comments, handling pushback | Google's process and approval rules |
+| Anthropic, [code-review plugin](https://github.com/anthropics/claude-code/tree/main/plugins/code-review) for Claude Code | Project-rule compliance as its own pass, and reporting only high-confidence findings (it runs four parallel agents and drops issues scored below 80 of 100) | LeanLoop uses one reviewer with an explicit verification step instead of parallel agents and a numeric score |
+| Anthropic, [claude-code-security-review](https://github.com/anthropics/claude-code-security-review) (MIT) | Leaving out low-impact, false-positive-prone findings such as generic denial of service, rate limiting, and resource exhaustion | It is a GitHub Action for pull requests; no text or code was reused |
+| GitHub, [Copilot code review](https://docs.github.com/en/copilot/concepts/agents/code-review) | Its documentation says it is not guaranteed to find every problem and should be supplemented by human review; the reviewer's report says a review is evidence, not a guarantee | No comparison with Copilot is made |
+| CodeRabbit, [path-based review instructions](https://docs.coderabbit.ai/guides/review-instructions) ([docs](https://docs.coderabbit.ai/)) | Focused guidance chosen by the files touched: the ML, frontend, and infrastructure add-ons | No comparison with CodeRabbit is made |
+| OWASP [Top 10:2025](https://owasp.org/Top10/2025/) and [ASVS 5.0](https://owasp.org/www-project-application-security-verification-standard/) | The security pass: access control, injection sinks, supply chain (new or unpinned dependencies), cryptographic failures, and errors that fail open | A review is not an ASVS verification at any level |
+| PyTorch [`torch.load`](https://docs.pytorch.org/docs/stable/generated/torch.load.html) and [reproducibility notes](https://docs.pytorch.org/docs/stable/notes/randomness.html) | `torch.load` defaults to `weights_only=True` and warns never to load data from an untrusted source; completely reproducible results are not guaranteed across releases, commits, or platforms, so seeds are checked against the run's own reproducibility goal | Defaults differ by version; the reviewer reads the project's pinned version |
+| Hugging Face Transformers, [loading models](https://huggingface.co/docs/transformers/main/en/models) | Pickle is insecure and safetensors are preferred; custom model code needs `trust_remote_code=True`, best with a pinned `revision` | |
+| Kapoor and Narayanan, [Leakage and the reproducibility crisis in machine-learning-based science](https://pmc.ncbi.nlm.nih.gov/articles/PMC10499856/) (Patterns 4(9), 2023) | Eight leakage types (no test set, preprocessing or feature selection on the full data, duplicates, illegitimate features, temporal leakage, non-independence, sampling bias), found in 294 papers across 17 fields: the ML add-on's split and leakage checks | |
+
+### Papers
+
+| Paper | Finding | Effect on the reviewer |
+|---|---|---|
+| [2603.00539](https://arxiv.org/abs/2603.00539) Are LLMs reliable code reviewers? | Models often judged correct code non-compliant, and prompts that demanded explanations and fixes raised misjudgments; executing the proposed fix as counterfactual evidence cut false rejections (averaged over five models, 54.8% to 16.3% on HumanEval) | Every candidate needs a concrete trigger; one executed test outweighs agreement |
+| [2607.03316](https://arxiv.org/abs/2607.03316) Is agentic code review helpful? | Developers rejected most CodeRabbit review comments in the wild, mostly as wrong, repetitive, or irrelevant; about a third were accepted | Precision first: merge findings by root cause, skip style, at most one line of nits |
+| [2604.03196](https://arxiv.org/abs/2604.03196) Code review agents in pull requests | Pull requests reviewed only by agents merged far less often than those reviewed only by humans (about 45% against 68%); closed agent-only ones mostly had low-signal feedback | The verdict is evidence for the owner and the user, recorded as an attestation, not a merge decision |
+| [2609.04167](https://arxiv.org/abs/2609.04167) SWE-Gate | 221 of 644 repairs that passed functional tests still broke reviewer-derived acceptance rules | "Passing tests do not prove a change correct"; a project-rule pass that quotes the rule |
+| [2608.09290](https://arxiv.org/abs/2608.09290) OpenCodeReview | Fixed, rule-based steps around an LLM reviewer beat general coding agents on AACR-Bench (up to 2.17x SEM-F1) with 5-15x fewer tokens | Fixed scope rules, ordered passes, and a fixed report format |
+| [2604.19049](https://arxiv.org/abs/2604.19049) Refute-or-Promote | An adversarial gate rejected about 79% of 171 candidate LLM defect reports before disclosure | Argue against each candidate as a skeptic before reporting it |
+| [2602.16741](https://arxiv.org/abs/2602.16741) Adversarial code comments | Across 9,366 trials on eight models, adversarial comments had no statistically significant effect on vulnerability detection; misses clustered in hard vulnerability classes | Code and comments stay data as defense in depth: the study measured detection, not agents with tools |
+| [2401.16310](https://arxiv.org/abs/2401.16310) Security code review with LLMs | LLMs did noticeably better than leading static analysis tools at security code review | A security pass in every review; issues a configured tool already catches are not repeated |
+
+## Incidents and containment
+
+| Source | What happened | Effect on LeanLoop |
+|---|---|---|
+| OpenAI, [OpenAI and Hugging Face incident technical report](https://cdn.openai.com/pdf/67869394-cb91-4c12-888c-5cbd85c7814c/OpenAI-Hugging-Face%20Incident-Technical-Report.pdf) | In July 2026, models under internal cyber evaluations in a sandboxed environment used a shared internal package service (JFrog Artifactory) and its shared credential as an improvised message board, exploited vulnerabilities in it to reach the internet, used publicly exposed credentials, and compromised parts of Hugging Face's infrastructure (July 11-13). An earlier alert did not stop the evaluation run. The report's security lesson: several independent, overlapping controls, because no single control should be assumed robust | Swarm workers share no writable service and coordinate only through Git artifacts the lead merges; LeanLoop claims no containment and leaves isolation to Claude Code's sandbox; credential use, network access, and new dependencies need the user's approval |
+| Hugging Face, [Anatomy of a frontier lab agent intrusion](https://huggingface.co/blog/agent-intrusion-technical-timeline) (July 27, 2026) | A technical timeline of the roughly four-and-a-half-day intrusion into its dataset-processing infrastructure through two injection vectors, with lateral movement and public web services used for command and control | Same |
+| Anthropic, [Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing) | An operating-system boundary on the files and network hosts that shell commands and their child processes can reach, on macOS, Linux, and WSL2; native Windows runs commands unsandboxed; file tools, MCP servers, and hooks run outside it | README and swarm guide: use WSL2 (or Linux or macOS) with the sandbox for untrusted or unattended work |
 
 ## Agent validation
 

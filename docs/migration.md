@@ -71,9 +71,10 @@ averages as if the tasks, models, and accepted outcomes were controlled.
 
 ## Claude Code specifics
 
-LeanLoop 0.5.0 targets Claude Code only. Install it once as a plugin; every
-project then sees `/leanloop:work`, `/leanloop:setup`, `/leanloop:audit`, and the
-`leanloop-reviewer` agent. A project needs only `leanloop.json` and the ignored
+LeanLoop 0.5.0 and later target Claude Code only. Install it once as a plugin;
+every project then sees `/leanloop:work`, `/leanloop:setup`, `/leanloop:audit`,
+`/leanloop:review`, `/leanloop:build`, and the `leanloop-reviewer` and
+`leanloop:code-reviewer` agents. A project needs only `leanloop.json` and the ignored
 `.leanloop/` folder, which `/leanloop:setup` creates.
 
 Claude Code also loads CLAUDE.md files from parent folders and your user folder,
@@ -106,6 +107,42 @@ There is intentionally no uninstall command that deletes project files. Plugin
 updates arrive when the plugin version changes; run `/plugin` to update. Task
 evidence recorded by an older runtime may be stale or ungated after an update:
 rerun checks and record fresh proof and review rather than editing stored state.
+
+## Moving from 0.5 to 0.6
+
+Update the plugin with `/plugin`. `leanloop.json` and lessons keep their
+format, and nothing in the project needs to change. What is new or stricter:
+
+1. **Finish any task started under 0.5 first, or start a new one.** 0.6 adds
+   start-time manifests and digests of Git-ignored check definitions to a
+   task's base. A 0.5 task has no manifest, so it is still compared with its
+   recorded commit; start a new task to get the full gate.
+2. **More changes need a review before `finish`.** Besides edited tests and
+   changed `leanloop.json` checks, `INTEGRITY_REVIEW_REQUIRED` now covers
+   check-definition files (`package.json` scripts and runner settings,
+   `pyproject.toml` tool sections, Makefiles, pytest, tox, Jest, Vitest, and
+   similar configs, `conftest.py`, `.npmrc`, and files your check commands
+   name) and checks that failed and then passed on the same source. Edits
+   outside `--scope` alone give `SCOPE_REVIEW_REQUIRED`. A task in a repository
+   without commits is now gated through a hash manifest instead of being
+   reported as unavailable.
+3. **Escalation is a real stop.** `finish` refuses with `ESCALATED` until
+   `resume --decision "..."` records your decision. Claude is told to quote
+   you and never to resume on its own. Scripts that called `finish` after
+   `escalate` must add the `resume` step.
+4. **Budget.** Only the first two runs on the unchanged starting source are
+   free; further reruns there use the attempt budget.
+5. **New commands, all user-invoked:** `/leanloop:review` runs the new
+   `leanloop:code-reviewer` agent, and `/leanloop:build` runs swarm mode (see
+   the [swarm guide](swarm.md)). Swarm runs create branches named
+   `leanloop/swarm/RUN` and `leanloop/swarm/RUN-PACKAGE` and worktrees under
+   `.leanloop/worktrees/`; `swarm abandon` removes them.
+6. **Audit** now also reports `CLAUDE.local.md` in parent folders and AGENTS.md
+   files, including ones a CLAUDE file shadows (`AGENTS_MD_SHADOWED`).
+7. **Budgets.** All skills and agents together may use 24 KiB (12 KiB in
+   0.5.1), and the code reviewer has its own 8 KiB; the work skill plus
+   `leanloop-reviewer` stay within 8 KiB. If you fork the skills,
+   `npm run validate` checks them.
 
 ## Moving from 0.4.0 (per-project copies) to the plugin
 

@@ -1,7 +1,7 @@
 {
   "name": "leanloop-kit",
-  "version": "0.5.1",
-  "description": "A Claude Code plugin for single-owner, evidence-gated engineering: bounded context and memory, test-integrity review, and a setup overhead audit.",
+  "version": "0.6.0",
+  "description": "A Claude Code plugin for single-owner, evidence-gated engineering: bounded context and memory, test-integrity review, a setup overhead audit, and an opt-in parallel build mode run from your own session.",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -17,6 +17,7 @@
     "lib/",
     "skills/",
     "agents/",
+    "evals/",
     "docs/",
     "scripts/",
     "tests/",

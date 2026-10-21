@@ -8,7 +8,11 @@ license: MIT
 # LeanLoop audit
 
 Run `node "${CLAUDE_PLUGIN_ROOT}/leanloop.mjs" audit` from the project root. It
-is read-only, never follows symlinks, and works without `/leanloop:setup`.
+is read-only, never follows symlinks, and works without `/leanloop:setup`. It
+covers CLAUDE.md, `.claude/CLAUDE.md`, and CLAUDE.local.md in the project and
+its parent folders, and AGENTS.md files, which Claude Code reads by default
+only when none of those exists on the path; it reports AGENTS.md files that
+are shadowed and not imported.
 
 Relay its JSON; do not rescore it or claim more than it shows:
 

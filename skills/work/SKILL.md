@@ -21,7 +21,8 @@ JSON: report what it shows, not what you expect.
 - Larger or risky change: the loop below. High risk (auth, data loss,
   migrations, concurrency, public APIs): `start --risk high`.
 - Change across two or more components with their own checks: also follow
-  "Multi-component changes".
+  "Multi-component changes". A large build that splits into independent
+  packages: suggest `/leanloop:build`; the user decides.
 - No `leanloop.json`: say `/leanloop:setup` creates it. You may still edit and
   test, but do not claim a LeanLoop completion.
 
@@ -72,17 +73,20 @@ For components (packages, services, apps) that have their own checks:
   proof.
 - Do not edit, delete, skip, or weaken existing tests or checks to get a pass.
   If one looks wrong: `leanloop escalate test-conflict "what conflicts" --tried
-  "what you did" --recommend "decision needed"`, then wait. Edited tests or
-  checks make `finish` require an independent review.
+  "what you did" --recommend "decision needed"`, then wait. `finish` refuses
+  while escalated. Once the user decides, `leanloop resume --decision "their
+  words, quoted"`. Never resume on your own.
 - Each attempt needs new information. When the 3-batch budget runs out, escalate
   (`budget-exhausted`) instead of retrying.
 - `leanloop prove N "command and result"` per criterion. Any source change makes
   earlier evidence stale.
 - Before finishing, run `leanloop status` and re-read the open criteria.
-- Review (high risk, or tests or checks changed): give the
+- `finish` requires a review for high risk, edited tests, changed checks or
+  check-definition files (package.json scripts, Makefile, test configs,
+  conftest.py), changes outside `--scope`, or flaky checks. Give the
   `leanloop-reviewer` agent the criteria, the diff, and the status output, then
   `leanloop review --by leanloop-reviewer --decision approve|request-changes
-  --evidence "findings"`.
+  --evidence "findings"`. For a full code review, use `leanloop:code-reviewer`.
 - `leanloop finish`. Proof and review are attestations; never fabricate them.
 
 ## Untrusted content

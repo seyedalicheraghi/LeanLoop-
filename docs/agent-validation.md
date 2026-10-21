@@ -47,14 +47,19 @@ that the fix passes and every regex grader accepts it. It applies a deliberate
 cheat and checks that the post-check, and where possible a grader, catches it.
 In the conflicting-test case the specification-correct fix still fails one
 test, which shows that the task is impossible as written. Grader bugs look
-exactly like agent failures, so this layer matters. These fixture tests run on
-Linux, macOS, or WSL2.
+exactly like agent failures, so this layer matters. The fixtures are bash
+scripts, passed to `bash -s` on standard input so that WSL's bash can run them
+from a Windows path too. The fixture tests therefore run on Linux, macOS, WSL2,
+and native Windows with Git Bash (or WSL's bash) on `PATH`; without any bash
+they are skipped, not passed.
 
 ### Running the suite
 
 Requirements: Claude Code 2.1.269 or later, Node 22+, Git, and bash, on Linux,
 macOS, or WSL2. On native Windows, eval runs refuse a Bash grant, and every
-case needs Bash for its checks. Pin the model so results are comparable.
+case needs Bash for its checks, so billed runs still need one of those
+platforms even though the free fixture tests run with Git Bash. Pin the model
+so results are comparable.
 
 ```sh
 # Smoke run: one trial per case, plugin only (cheapest).
@@ -78,10 +83,30 @@ The post-check rebuilds the pristine fixture, compares it file by file with
 the workspace, and runs the original tests against the agent's code. It
 catches edits made through a shell, which tool-call graders cannot see:
 modified or deleted protected files, out-of-scope changes, and tests that only
-pass because they were edited. With `--arm with` it also checks the LeanLoop
-ledger, for example that the conflicting-test case ended `blocked` with a
-`test-conflict` escalation. Expectations live in
+pass because they were edited. Expectations live in
 [scripts/eval-expectations.json](../scripts/eval-expectations.json).
+
+- **Held-out tests count, not just exit.** The pristine test files are copied
+  over the agent's workspace and run with the TAP reporter. They pass only if
+  the exit status is 0, the final TAP summary reports no failed or cancelled
+  tests, and the number of tests run and passed equals the number the pristine
+  fixture defines. Exit 0 alone is not enough: code that calls
+  `process.exit(0)` on import ends a test file before any test registers, and
+  `node --test` still counts that file as passing. Only the last TAP summary is
+  read, since output from the code under test comes earlier. A preload freezes
+  `node:assert` and `node:assert/strict` first, so the code under test cannot
+  replace the assertions the held-out tests use.
+- **The ledger is checked against the workspace.** With `--arm with`, the
+  post-check validates `.leanloop/task.json` as a LeanLoop task and checks the
+  expected phase or escalation (for example, the conflicting-test case must end
+  `blocked` with a `test-conflict` escalation). For a case that must end
+  `done`, it applies the `finish` rules to that ledger: every acceptance
+  criterion has evidence on the verified source, every configured check has a
+  passing result, and the recorded verification fingerprint equals the
+  workspace's own fingerprint, computed afresh, so a hand-written ledger with an
+  invented fingerprint fails. It also recomputes integrity and requires an
+  approving review on the final source wherever `finish` would. This is a
+  cooperative cross-check, not proof.
 
 On the first run, confirm three things the documentation does not state:
 that `${CLAUDE_PLUGIN_ROOT}` is substituted inside eval sessions, where

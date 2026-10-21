@@ -10,7 +10,8 @@ verification without adding an independent capability.
 The default is one owner with a small loop. A separate reviewer is valuable when
 independence matters. A separate researcher can help when a question is genuinely
 separable and needs substantial context. Parallel writers require separate
-worktrees and an integration plan; this kit does not manage them.
+worktrees and an integration plan; the opt-in swarm mode (below) provides
+them for decomposable work, and nothing else in the kit runs parallel writers.
 
 What the [public evidence](../SOURCES.md) says, in short:
 
@@ -55,7 +56,9 @@ One task is active per project/worktree. States are:
 ```text
 start -> active -> checking -> active (selected checks passed)
                          \-> blocked (failed, interrupted, or source changed)
-active/blocked -> done (all completion gates satisfied)
+active/blocked -> blocked (escalate: waits for the user's decision)
+blocked (escalated) -> active (resume --decision records that decision)
+active/blocked -> done (all completion gates satisfied, no open escalation)
 active/blocked -> cancelled (explicit reason)
 ```
 
@@ -187,27 +190,70 @@ the full bounded logs stay in `.leanloop/logs/`.
 
 ## Integrity, escalation, and history
 
-Agents under pressure edit or delete tests, special-case test inputs, or weaken
-checks to get a pass (see [SOURCES.md](../SOURCES.md)). `start` records the HEAD
-commit and a digest of the configured checks and `testPaths`. `status` and
-`finish` compare the tracked files against that commit, with staged and
-worktree changes included. A modified, deleted, or retyped file that matches a
-test pattern, or any change to the checks or `testPaths`, makes `finish` require
-an approving review recorded on the final source (`INTEGRITY_REVIEW_REQUIRED`).
-New test files do not. The review requirement does not prove the change is
-wrong; it makes a second reader look at it.
+Agents under pressure edit or delete tests, special-case test inputs, weaken
+checks, or edit beyond their task to get a pass (see [SOURCES.md](../SOURCES.md)).
+`start` records a base: the HEAD commit, a digest of the configured checks and
+`testPaths`, a start-time manifest, and digests of Git-ignored check-definition
+files.
 
-Limits: a task started in an empty repository has no base commit and reports
-the integrity check as unavailable. Untracked files that existed at `start` and
-were later edited are not detected. Special-casing in source code, hard-coded
-results, and new skip markers are invisible to this gate; the reviewer is told
-to look for them. Tasks started before 0.5.0 have no base and are not gated.
+- **Manifest.** With a commit, the manifest hashes the files that already
+  differed from HEAD at `start`, so changes that predate the task are not
+  charged to it. In a repository with no commit, it hashes every test,
+  check-definition, and out-of-scope file instead, so the gate still works. It
+  is stored under `.leanloop/manifests/` with its digest in the task. A missing
+  or altered manifest, or one over 5,000 files or 32 MiB, makes integrity
+  "unavailable", which requires a review rather than reading as "nothing
+  changed".
+- **Check-definition files** can change what a check runs without touching
+  `leanloop.json`: `package.json` (ignoring metadata such as name, version,
+  description, and dependencies), `pyproject.toml` (ignoring `[project]` and
+  `[build-system]`), Makefiles, `pytest.ini`, `tox.ini`, `setup.cfg`,
+  `conftest.py`, `noxfile.py`, Jest, Vitest, Vite, Playwright, AVA, Karma,
+  Mocha, c8, and nyc configs, `.npmrc`, `.yarnrc`, `bunfig.toml`, and any
+  project path a configured check command names (such as `ci/test.sh` in
+  `["bash", "ci/test.sh"]`). Git-ignored ones are found without reading inside
+  installed dependency trees (`node_modules`, `site-packages`, `.tox`, ...),
+  nested repositories, or links. The scan of other ignored directories is
+  bounded; past the bound (a large dataset or build tree), Git lists the
+  matching files itself, which is slower but has no limit.
+- **Scope.** With `start --scope PATH`, files changed outside those paths are
+  listed as out of scope.
+
+`status` and `finish` compare the current files with the base, staged and
+worktree changes included. `finish` then requires an approving review recorded
+on the final source:
+
+| Finding | Code |
+|---|---|
+| A test file that existed at start modified, deleted, or retyped (new tests are fine) | `INTEGRITY_REVIEW_REQUIRED` |
+| Checks or `testPaths` changed in `leanloop.json` | `INTEGRITY_REVIEW_REQUIRED` |
+| A check-definition file changed in a part that can affect a check | `INTEGRITY_REVIEW_REQUIRED` |
+| A check failed and then passed on the same source (a rerun until green) | `INTEGRITY_REVIEW_REQUIRED` |
+| Integrity unavailable (see Manifest) | `INTEGRITY_REVIEW_REQUIRED` |
+| Only files outside the scope changed | `SCOPE_REVIEW_REQUIRED` |
+| High risk, or a review was already recorded | `REVIEW_REQUIRED` |
+
+The refusal names the files, up to 20 per kind. The review requirement does
+not prove the change is wrong; it makes a second reader look at it.
+
+Limits: special-casing in source code, hard-coded results, and skip markers in
+new files are invisible to this gate; the reviewers are told to look for them.
+Installed dependencies are not scanned, so edits there stay invisible. Tasks
+started before 0.5.0 have no base and are not gated.
+
+The attempt budget charges every check batch except the first two runs on the
+unchanged starting source, which reproduce the reported failure; a third run
+there counts, so a flaky check cannot be retried for free.
 
 `escalate KIND SUMMARY --tried TEXT --recommend TEXT` stops a task with a
 structured record: a conflict between tests and the specification, an exhausted
 budget, missing access, or unclear scope. It moves the task to `blocked` and
-shows the record in `status`. When the attempt budget runs out, the error points
-to `escalate` before `extend`. In one controlled study, an escalation channel
+shows the record in `status`, and `finish` refuses with `ESCALATED` until it is
+resolved. `resume --decision TEXT` records the user's decision with a timestamp
+and makes the task active again; checks, evidence, and review still apply. The
+CLI cannot tell who decided, so the work skill tells Claude to quote the user's
+decision and never to resume on its own. When the attempt budget runs out, the
+error points to `escalate` before `extend`. In one controlled study, an escalation channel
 plus a written policy cut test hacking from 23.6% to 5.3%, pooled over eight models;
 the result came from nine defective problems and does not transfer automatically.
 
@@ -218,6 +264,17 @@ the red-then-green evidence for a bug fix. It is reported, not required, because
 many bugs cannot be reproduced by a test. Checkpoints store the last check
 result beside the owner's summary, since a summary written before compaction is
 a claim, not evidence.
+
+## Swarm mode
+
+Swarm mode (0.6.0, design A) is opt-in through `/leanloop:build`. The user's
+own Claude Code session is the lead and runs package workers as ordinary
+subagents under the user's permission rules and sandbox. LeanLoop starts no
+model sessions and passes no permission flags; `leanloop swarm` only validates
+the plan, manages the run's branches and worktrees, writes worker briefs, and
+gates acceptance, merges, and sealed verification. Every worker finishes a
+normal LeanLoop task in its own worktree, so all the gates above apply per
+package. Details: [swarm guide](swarm.md) and [swarm design](swarm-design.md).
 
 ## Bounded project memory
 
@@ -259,9 +316,14 @@ configuration, never writes, and never follows symlinks.
   files they `@import` (relative to the importing file, up to four hops,
   ignoring imports inside code, stopping cycles; imports outside the project are
   listed but not read); `.claude/rules` files without a `paths` field; and
-  `CLAUDE.md` or `.claude/CLAUDE.md` in every parent folder up to the
-  filesystem root, which covers `~/.claude/CLAUDE.md` for projects under your
-  home folder.
+  `CLAUDE.md`, `.claude/CLAUDE.md`, or `CLAUDE.local.md` in every parent folder
+  up to the filesystem root, which covers `~/.claude/CLAUDE.md` for projects
+  under your home folder. `AGENTS.md` and `.claude/AGENTS.md` count as
+  always-on only when none of those CLAUDE files exists on the path (Claude
+  Code's default; `~/.claude/CLAUDE.md` does not count for that check);
+  otherwise they are reported as shadowed (`AGENTS_MD_SHADOWED`, info) unless
+  a CLAUDE file imports them. User-level settings and the Project instructions
+  setting are not inspected.
 - **On demand:** nested `CLAUDE.md` files and rules with `paths`.
 - **Components:** `.claude/agents`, `.claude/skills`, `.claude/commands`,
   hooks and permissions in `.claude/settings.json` and `settings.local.json`,
@@ -306,18 +368,24 @@ File contents never appear in the output. Tokens are estimated as bytes/4.
 LeanLoop is a Claude Code plugin. The repository root is the plugin:
 `.claude-plugin/plugin.json` names it, and `.claude-plugin/marketplace.json`
 publishes it with `source: "./"`. Claude Code discovers `skills/work`,
-`skills/setup`, `skills/audit`, and `agents/leanloop-reviewer.md` by convention.
+`skills/setup`, `skills/audit`, `skills/review`, `skills/build`,
+`agents/leanloop-reviewer.md`, and `agents/code-reviewer.md` by convention.
 Skills call the bundled CLI through `${CLAUDE_PLUGIN_ROOT}/leanloop.mjs`, which
 Claude Code substitutes in skill text. The plugin root changes on every update,
 so no state is written there. The plugin ships no hooks, MCP servers, `bin/`
 PATH additions, settings, or permission rules; validation fails if any appear.
 
 Every enabled plugin adds its skill and agent descriptions to each session, so
-descriptions stay short, and `setup` and `audit` are user-invoked only
-(`disable-model-invocation`). The work skill plus the reviewer stay within 8 KiB
-and all skills plus the reviewer within 12 KiB. The reviewer's `tools` list
-(Read, Grep, Glob) keeps it read-only; a plugin agent cannot change its own
-permission mode.
+descriptions stay short, and `setup`, `audit`, `review`, and `build` are
+user-invoked only (`disable-model-invocation`). The work skill plus
+`leanloop-reviewer` stay within 8 KiB, the code reviewer within 8 KiB, and all
+skills and agents together within 24 KiB. `leanloop-reviewer`'s `tools` list
+(Read, Grep, Glob) keeps it read-only. The code reviewer also has Bash, for
+read-only Git and, when allowed, the project's own tests, and its
+`disallowedTools` removes Write, Edit, NotebookEdit, WebFetch, and WebSearch.
+Bash itself can write, so keeping it read-only rests on the agent's
+instructions and the user's permission prompts. A plugin agent cannot change
+its own permission mode.
 
 `init` creates only `leanloop.json` (when absent) and `.leanloop/.gitignore`,
 publishing each file exclusively under the project lock. It validates an

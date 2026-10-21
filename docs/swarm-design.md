@@ -1,17 +1,30 @@
 # Swarm mode design
 
-Status: design for LeanLoop 0.6. Each choice cites the evidence in
-[SOURCES.md](../SOURCES.md) or is labelled a design choice.
+Status: design A, implemented in LeanLoop 0.6. Each choice cites the evidence
+in [SOURCES.md](../SOURCES.md) or is labelled a design choice. The user guide is
+[swarm.md](swarm.md).
+
+## Design A in one paragraph
+
+The user's own Claude Code session is the lead. It runs package workers as
+ordinary Claude Code subagents, under the user's normal permission rules and
+sandbox. **LeanLoop never launches model sessions, never starts `claude -p`,
+and never bypasses or widens permissions.** It provides deterministic helpers
+(`leanloop swarm ...`: plan validation, worktrees and branches, worker briefs,
+acceptance and merge gates, sealed verification, cleanup) and the procedure in
+the `/leanloop:build` skill. Design choice: an earlier draft had LeanLoop start
+headless workers itself; that would have made LeanLoop a process supervisor
+with its own permission flags, budgets, and kill switch, which the development
+contract (AGENTS.md) rules out.
 
 ## Goal and the two modes
 
-LeanLoop gets two modes on one foundation, chosen per project in
-`leanloop.json` and overridable per request:
+LeanLoop has two modes on one foundation, chosen per request:
 
 | | Guided (0.5) | Swarm (0.6) |
 |---|---|---|
 | Start | Ask normally, or `/leanloop:work` | `/leanloop:build "idea"` |
-| Driver | You and one Claude session | A lead session, parallel workers, an integrator, a verifier |
+| Driver | You and one Claude session | Your session as lead, with subagent workers |
 | Best for | Coupled or sequential work, debugging, research code | Decomposable work: new apps, independent workstreams |
 
 Both share the evidence gates (checks, criteria, integrity review, `escalate`),
@@ -32,63 +45,73 @@ with reasons; the user decides.
    Spec ambiguity is a leading multi-agent failure class (2503.13657).
 2. **Plan.** `plan.json` holds work packages: `id`, goal, `ownedPaths`
    (disjoint), `dependsOn` (a DAG), `contracts` (APIs, types, data and model
-   I/O shapes, metric thresholds), per-package `checks`, and acceptance
-   criteria. Split by dependency cohesion, not by file; keep coupled work in one
-   package (2606.00953, 2606.13733). `leanloop swarm validate` rejects cycles,
-   overlapping owned paths, packages without checks, and contracts owned by no
-   one.
+   I/O shapes, metric thresholds; read-only references), per-package `checks`,
+   and acceptance criteria. Split by dependency cohesion, not by file; keep
+   coupled work in one package (2606.00953, 2606.13733). `leanloop swarm
+   validate` rejects cycles, unknown dependencies, duplicate ids, overlapping
+   owned paths, packages without checks or acceptance criteria, and plans of
+   more than 20 packages.
 3. **Approval.** Before any parallel spend, the user approves the spec, the
-   package graph, the worker count, the budget, and every permission the run
-   needs (network domains, GPU jobs, new dependencies).
+   package graph, the worker count, and every permission the run needs
+   (commands, network domains, GPU jobs, new dependencies).
 4. **Bootstrap.** For a new project the lead first creates the skeleton:
    folders, a runnable check per package, shared contracts, and sealed
-   acceptance tests stored outside every worker worktree. This gives an empty
-   repository checks to finish against.
-5. **Build.** `leanloop swarm run` starts at most 4 workers at once
-   (2610.17471: verifiers plateaued after 4 workers; design choice for the
-   default of 3), each a headless `claude -p` session in its own git worktree
-   and branch. A worker receives its package brief and the work skill, and must
-   `finish` through LeanLoop in its worktree. Workers coordinate only through
-   artifacts, never through shared writable services or chat (2608.16801;
-   incident report: a shared package mirror became the agents' message board).
-6. **Integrate.** The lead merges one package at a time in dependency order:
-   rebase, run that package's checks, then the integration suite. A conflict
-   goes back to the owning package's worker.
-7. **Verify.** A verifier that never writes product code runs the sealed
-   acceptance tests; the code reviewer reviews the merged diff; the lead
-   finishes the top-level LeanLoop task with that evidence. Centralized
-   verification limited error amplification in 2512.08296; agents seek grading
-   material, so acceptance tests stay out of builders' reach (2608.16801).
-8. **Report.** What was built, the evidence per criterion, cost and time, and
-   what remains or needs a decision.
+   acceptance tests under `.leanloop/sealed/` in the main checkout, which no
+   worker worktree contains. This gives an empty repository checks to finish
+   against.
+5. **Build.** `swarm start` creates the integration branch and worktree from
+   HEAD without switching the user's branch. For each package whose
+   dependencies have merged, `swarm prepare` creates its worktree and branch
+   from the integration tip and prints a brief; the lead hands the brief to a
+   Claude Code subagent. At most 4 run at once (2610.17471: verifiers plateaued
+   after 4 workers). A worker must `finish` through LeanLoop in its worktree.
+   Workers coordinate only through artifacts, never through shared writable
+   services or chat (2608.16801; incident report: a shared package mirror
+   became the agents' message board).
+6. **Integrate.** `swarm accept` requires a done LeanLoop task for the
+   planned goal and criteria with fresh evidence and changes only inside the
+   owned paths, then commits on the package branch. `swarm merge` merges one
+   package at a time in dependency order (`--no-ff`), then runs that package's
+   checks and the integration checks. A conflict aborts the merge; a failing
+   check resets the integration branch; either way the package goes back to
+   its worker for rework.
+7. **Verify.** `swarm verify` runs the sealed acceptance tests in the
+   integration worktree with `LEANLOOP_SEALED_DIR` pointing at the main
+   checkout's `.leanloop/sealed`; the `leanloop:code-reviewer` agent reviews
+   the integration diff. Centralized verification limited error amplification
+   in 2512.08296; agents seek grading material, so acceptance tests stay out of
+   builders' worktrees (2608.16801).
+8. **Report.** What was built, the evidence per criterion, and what remains or
+   needs a decision.
 
 The lead stops and asks when a contract or the spec must change, a worker
-escalates, a budget would be exceeded, or a step crosses an approval boundary.
+escalates, or a step crosses an approval boundary.
 
 ## Containment
 
-The OpenAI and Hugging Face incident (August 2026) shows what autonomous agents
+The OpenAI and Hugging Face incident (activity May to July 2026, reported in August 2026) shows what autonomous agents
 do when a task pushes them: they probed their environment, escaped
 "isolated" containers through a shared package mirror and a shared credential,
-used the mirror as a message board, and kept running after alerts fired. The
-swarm therefore enforces:
+used the mirror as a message board, and kept running after alerts fired. In
+design A, process, tool, and network containment belong to Claude Code, which
+already runs the workers; LeanLoop adds bookkeeping gates on top:
 
 | Control | Enforced by | Notes |
 |---|---|---|
-| One worktree and branch per worker; no push credentials | Orchestrator | Worktrees isolate files, not processes or network |
-| Environment allowlist; tokens such as `GITHUB_TOKEN`, `NPM_TOKEN`, `HF_TOKEN`, `AWS_*` removed | Orchestrator | |
-| Per-worker `--max-turns`, `--max-budget-usd`, wall-clock timeout, process-tree kill | Orchestrator | `taskkill /T` on Windows, process groups on POSIX |
-| Narrow `--allowedTools`; no web tools; `--permission-mode dontAsk` | Orchestrator | |
-| `leanloop swarm stop` kills every worker; a global budget stops the run | Orchestrator | Kill switch |
-| Transcripts and logs written outside worker worktrees | Orchestrator | Workers cannot rewrite their own record |
+| One worktree and branch per package; owned paths checked before commit | `swarm prepare`, `swarm accept` | Worktrees isolate files in Git, not processes, reads, or network |
+| Merge only accepted packages, in dependency order, with checks; roll back on failure | `swarm merge` | |
+| Sealed acceptance tests kept outside every worker worktree | Bootstrap, `swarm verify` | Still readable by path from the same machine; cooperative |
+| Tool permissions, permission prompts, and modes | Claude Code permission rules of the user's session | LeanLoop never passes or widens permission flags |
 | Deny-by-default network with a short allowlist; OS-level isolation | Claude Code sandbox in WSL2, Linux, or macOS; or a container | Not available on native Windows |
-| Human approval before push, deploy, publish, credential use, new dependencies, long GPU jobs, or any physical hardware motion | Lead and orchestrator | |
+| Concurrency limit (at most 4 workers) and stopping workers | The lead session and the user | LeanLoop starts and stops no processes besides configured checks |
+| Human approval before push, deploy, publish, credential use, new dependencies, long GPU jobs, or any physical hardware motion | Lead, per the build skill, and Claude Code permissions | |
 
 On native Windows, Claude Code runs shell commands unsandboxed and Windows
-Sandbox needs Pro or Enterprise. The swarm therefore refuses to start on native
-Windows unless the user passes `--unsandboxed` for that run, and the docs
-recommend WSL2 with Claude Code's sandbox enabled. Orchestrator controls are
-cooperative bookkeeping, not a security boundary.
+Sandbox needs Pro or Enterprise, so the docs recommend WSL2 with Claude Code's
+sandbox enabled for swarm runs. LeanLoop's gates are cooperative bookkeeping,
+not a security boundary: a subagent with shell access can still read sealed
+tests, edit other worktrees, or run Git directly. `swarm accept` and `swarm
+merge` catch out-of-scope results; they cannot prevent out-of-scope actions.
 
 ## Machine learning and robotics work
 
@@ -98,11 +121,12 @@ seed, checkpoint path, and metrics. "Done" for an ML package means metric gates
 against a stored baseline (success rate, latency on the target device, accuracy
 drop after quantization) plus fast proxy checks (a short smoke run whose loss
 falls, an export-and-parity test). Motion on physical robots and changes to
-network or device configuration always need explicit operator approval.
+network or device configuration always need explicit operator approval. Job
+records are not implemented in 0.6.
 
 ## Open items to verify on first run
 
-- Headless worker flags and `--bare` behaviour in the installed Claude Code.
-- Plugin loading in `claude -p` workers (`--plugin-dir`).
-- Sandbox settings inside WSL2 and allowlisted domains for the model API and
-  package registries.
+- How many parallel subagents the installed Claude Code runs at once, and how
+  their permission prompts surface to the user.
+- Sandbox settings inside WSL2 and allowlisted domains for package registries.
+- Whether subagents reliably keep `--project WORKTREE` on every LeanLoop call.
